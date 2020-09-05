@@ -82,6 +82,45 @@ track_length = ca.Function('length', [n_f_a], [dis(o_x_s(n_f_a[:-1]), o_x_e(n_f_
 
 # d_th = ca.Function('d_th', [v_f, d_f], [v_f/l * tan(d_f)])
 
+class MyFcnN(ca.Callback):
+  def __init__(self, name, opts={}):
+    ca.Callback.__init__(self)
+    self.construct(name, opts)
+
+  # Number of inputs and outputs
+  def get_n_in(self): return 2*(N-1)
+  def get_n_out(self): return N
+
+  # Initialize the object
+  def init(self):
+     print('initializing object')
+
+  # Evaluate numerically
+  def eval(self, arg):
+    ni = arg[:N]
+    thi = arg[N:2*N]
+
+    dn = d_n(ni, thi)
+
+    return dn
+
+
+g_fcn = MyFcnN('g_dog')
+
+ones = np.ones(N)
+n0 = ones*0
+
+th0 = []
+
+for i in range(N-1):
+    th_00 = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
+    th0.append(th_00)
+
+th0.append(0)
+th0 = np.array(th0)
+
+arg = ca.vertcat(n0[:-1], th0[:-1])
+print(g_fcn(arg))
 
 
 
@@ -112,11 +151,12 @@ nlp = {\
     'g': ca.vertcat(
                 # dynamic constraints
                 # th[1:] - (th[:-1] + d_th(vs[:-1], d[:-1])),
-                n[1:] - (d_n(n[:-1], th[:-1])),
+                # n[1:] - (d_n(n[:-1], th[:-1])),
+                n[1:] - g_fcn(ca.vertcat(n[:-1], th[:-1])),
 
                 # boundary constraints
-                # n[0], th[0],
-                # n[-1], th[-1], th[-2]
+                n[0], th[0],
+                n[-1], th[-1]
             ) \
     
     }
@@ -137,17 +177,7 @@ nlp = {\
 
 S = ca.nlpsol('S', 'ipopt', nlp)
 
-ones = np.ones(N)
-n0 = ones*0
 
-th0 = []
-
-for i in range(N-1):
-    th_00 = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
-    th0.append(th_00)
-
-th0.append(0)
-th0 = np.array(th0)
 # calculate this afterwards
 # d0 = atan(l * (th0[1:] - th0[:-1]) / vs[:-1])
 # d0 = np.insert(np.array(d0), -1, 0)
