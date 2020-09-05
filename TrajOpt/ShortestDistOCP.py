@@ -83,7 +83,7 @@ nlp = {\
 
                 # boundary constraints
                 n[0], th[0],
-                n[-1], th[-1]
+                n[-1], th[-1], th[-2]
             ) \
     }
     

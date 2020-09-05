@@ -159,13 +159,25 @@ def calc_splines(path):
 
 
 def plot_track(track):
-    track = np.vstack((track, track[-1, :]))
+    # track = np.vstack((track, track[-1, :]))
 
-    x, y, normvec = calc_splines(track)
+    # x, y, normvec = calc_splines(track)
+    normvec = []
+    for i in range(len(track) - 1):
+        th = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
+        normvec.append(lib.theta_to_xy(th + np.pi/2))
+    
+    normvec.append(lib.theta_to_xy(th + np.pi/2)) # last point
+    normvec = np.array(normvec)
     l, r = generate_bounds(track, normvec)
+
 
     plt.figure()
 
+    for i in range(len(l)):
+        xs = [l[i, 0], r[i, 0]]
+        ys = [l[i, 1], r[i, 1]]
+        plt.plot(xs, ys)
     plt.plot(track[:, 0], track[:, 1], linewidth=1)
     plt.plot(l[:, 0], l[:, 1], linewidth=2)
     plt.plot(r[:, 0], r[:, 1], linewidth=2)
