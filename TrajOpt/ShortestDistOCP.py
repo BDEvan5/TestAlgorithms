@@ -7,11 +7,14 @@ from TrajPlanner import *
 # possibly simplify track
 track = load_track('TrajOpt/RaceTrack1000_abscissa.csv',show=False)
 # track = track/10
-cs, cy, nvecs = calc_splines(track[:, 0:2])
+# cs, cy, nvecs = calc_splines(track[:, 0:2])
+nvecs = calc_my_nvecs(track)
 # track = np.concatenate([track, nvecs], axis=-1)
 
 ms = nvecs[:, 1] / nvecs[:, 0] # dy/dx
 cs = track[:, 1] / (track[:, 0] * ms)
+txs = track[:, 0]
+tys = track[:, 1]
 
 track[:, 2] = ms 
 track[:, 3] = cs
@@ -46,7 +49,7 @@ o_y_s = Function('o_y', [n_f], [track[:-1, 1] + nvecs[:-1, 1] * n_f])
 o_x_e = Function('o_x', [n_f], [track[1:, 0] + nvecs[1:, 0] * n_f])
 o_y_e = Function('o_y', [n_f], [track[1:, 1] + nvecs[1:, 1] * n_f])
 
-get_c = Function('get_c', [m0_f, x_f, y_f], [y_f / (m0_f * x0_f)])
+get_c = Function('get_c', [m0_f, x_f, y_f], [y_f / (m0_f * x_f)])
 dis = Function('dis', [x0_f, x1_f, y0_f, y1_f], [sqrt((x1_f-x0_f)**2 + (y1_f-y0_f)**2)])
 
 inter_x = Function('inter', [c0_f, m0_f], [(cs[1:] - c0_f)/(m0_f - ms[1:])])
@@ -112,7 +115,8 @@ for i in range(N-1):
     th_00 = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
     th0.append(th_00)
 
-th0 = np.array(0)
+th0.append(0)
+th0 = np.array(th0)
 # calculate this afterwards
 # d0 = atan(l * (th0[1:] - th0[:-1]) / vs[:-1])
 # d0 = np.insert(np.array(d0), -1, 0)
@@ -120,8 +124,8 @@ th0 = np.array(0)
 x0 = vertcat(n0, th0)
 # x0 = vertcat(n0)
 
-lbx = [-n_max]*N + [-np.pi]*N + [-d_max]*N
-ubx = [n_max]*N +[np.pi]*N + [d_max]*N
+lbx = [-n_max]*N + [-np.pi]*N # + [-d_max]*N
+ubx = [n_max]*N +[np.pi]*N #+ [d_max]*N
 
 r = S(x0=x0, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
 
@@ -130,7 +134,7 @@ print(f"Solution found")
 x_opt = r['x']
 
 track = load_track('TrajOpt/RaceTrack1000_abscissa.csv',show=False)
-n_set = np.array(x_opt)
+n_set = np.array(x_opt[:N])
 n_set = np.insert(n_set, 0, 0)
 plot_race_line(np.array(track), n_set)
 

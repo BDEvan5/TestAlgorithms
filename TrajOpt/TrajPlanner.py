@@ -156,12 +156,7 @@ def calc_splines(path):
 
     return coeffs_x, coeffs_y, normvec_normalized
 
-
-
-def plot_track(track):
-    # track = np.vstack((track, track[-1, :]))
-
-    # x, y, normvec = calc_splines(track)
+def calc_my_nvecs(track):
     normvec = []
     for i in range(len(track) - 1):
         th = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
@@ -169,6 +164,15 @@ def plot_track(track):
     
     normvec.append(lib.theta_to_xy(th + np.pi/2)) # last point
     normvec = np.array(normvec)
+
+    return normvec
+
+
+def plot_track(track):
+    # track = np.vstack((track, track[-1, :]))
+
+    # x, y, normvec = calc_splines(track)
+    normvec = calc_my_nvecs(track)
     l, r = generate_bounds(track, normvec)
 
 
@@ -188,10 +192,16 @@ def plot_track(track):
 def plot_race_line(track, n_set):
     track = np.vstack((track, track[-1, :]))
 
-    x, y, normvec = calc_splines(track)
+    # x, y, normvec = calc_splines(track)
+    normvec = calc_my_nvecs(track)
     l, r = generate_bounds(track, normvec)
 
     plt.figure()
+
+    for i in range(len(l)):
+        xs = [l[i, 0], r[i, 0]]
+        ys = [l[i, 1], r[i, 1]]
+        plt.plot(xs, ys)
 
     plt.plot(track[:, 0], track[:, 1], linewidth=1)
     plt.plot(l[:, 0], l[:, 1], linewidth=1)
