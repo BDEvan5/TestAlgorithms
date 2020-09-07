@@ -41,11 +41,14 @@ nvecs = calc_my_nvecs(track)
 
 txs = track[:, 0]
 tys = track[:, 1]
-ms = nvecs[:, 1] / nvecs[:, 0] # dy/dx
-cs = tys / (txs * ms)
+# ms = nvecs[:, 1] / nvecs[:, 0] # dy/dx
+# cs = tys / (txs * ms)
 
-track[:, 2] = ms 
-track[:, 3] = cs
+th_ns = [lib.get_bearing([0, 0], nvecs[i, 0:2]) for i in range(len(nvecs))]
+sls = np.sqrt(np.sum(np.power(np.diff(track[:, :2], axis=0), 2), axis=1))
+
+# track[:, 2] = ms 
+# track[:, 3] = cs
 
 l = 0.33
 a_max = 7.5
@@ -77,17 +80,19 @@ o_y_s = ca.Function('o_y', [n_f], [track[:-1, 1] + nvecs[:-1, 1] * n_f])
 o_x_e = ca.Function('o_x', [n_f], [track[1:, 0] + nvecs[1:, 0] * n_f])
 o_y_e = ca.Function('o_y', [n_f], [track[1:, 1] + nvecs[1:, 1] * n_f])
 
-get_c = ca.Function('get_c', [m0_f, x_f, y_f], [y_f / (m0_f * x_f)])
+# get_c = ca.Function('get_c', [m0_f, x_f, y_f], [y_f / (m0_f * x_f)])
 dis = ca.Function('dis', [x0_f, x1_f, y0_f, y1_f], [ca.sqrt((x1_f-x0_f)**2 + (y1_f-y0_f)**2)])
 
-inter_x = ca.Function('inter', [c0_f, m0_f], [(cs[1:] - c0_f)/(m0_f - ms[1:])])
-inter_y = ca.Function('inter', [c0_f, m0_f], [(c0_f*ms[1:] - cs[1:]*m0_f) / (ms[1:] - m0_f)])
+# inter_x = ca.Function('inter', [c0_f, m0_f], [(cs[1:] - c0_f)/(m0_f - ms[1:])])
+# inter_y = ca.Function('inter', [c0_f, m0_f], [(c0_f*ms[1:] - cs[1:]*m0_f) / (ms[1:] - m0_f)])
 
-get_nx = ca.Function('nx', [n_f, th_f], [inter_x(get_c(ca.tan(th_f), o_x_s(n_f), o_y_s(n_f)), ca.tan(th_f))])
-get_ny = ca.Function('ny', [n_f, th_f], [inter_y(get_c(ca.tan(th_f), o_x_s(n_f), o_y_s(n_f)), ca.tan(th_f))])
+# get_nx = ca.Function('nx', [n_f, th_f], [inter_x(get_c(ca.tan(th_f), o_x_s(n_f), o_y_s(n_f)), ca.tan(th_f))])
+# get_ny = ca.Function('ny', [n_f, th_f], [inter_y(get_c(ca.tan(th_f), o_x_s(n_f), o_y_s(n_f)), ca.tan(th_f))])
 
 
-d_n = ca.Function('d_n', [n_f, th_f], [dis(get_nx(n_f, th_f), track[1:, 0], get_ny(n_f, th_f), track[1:, 1])])
+# d_n = ca.Function('d_n', [n_f, th_f], [dis(get_nx(n_f, th_f), track[1:, 0], get_ny(n_f, th_f), track[1:, 1])])
+
+d_n = ca.Function('d_n', [n_f, th_f], [sls/ca.tan(th_ns[:-1] - th_f)])
 
 track_length = ca.Function('length', [n_f_a], [dis(o_x_s(n_f_a[:-1]), o_x_e(n_f_a[1:]), 
                             o_y_s(n_f_a[:-1]), o_y_e(n_f_a[1:]))])
@@ -124,35 +129,35 @@ th = ca.MX.sym('th', N)
 
 
 
-# nlp = {\
-#     'x': ca.vertcat(n, th),
-#     'f': ca.sumsqr(track_length(n)),
-#     'g': ca.vertcat(
-#                 # dynamic constraints
-#                 # th[1:] - (th[:-1] + d_th(vs[:-1], d[:-1])),
-#                 n[1:] - (d_n(n[:-1], th[:-1])),
-#                 # n[1:] - g_fcn(ca.vertcat(n[:-1], th[:-1])),
-
-#                 # boundary constraints
-#                 n[0], th[0],
-#                 n[-1], th[-1]
-#             ) \
-    
-#     }
-    
 nlp = {\
-    'x': ca.vertcat(n),
+    'x': ca.vertcat(n, th),
     'f': ca.sumsqr(track_length(n)),
     'g': ca.vertcat(
                 # dynamic constraints
                 # th[1:] - (th[:-1] + d_th(vs[:-1], d[:-1])),
-                # n[1:] - (d_n(n[:-1], th[:-1])),
+                n[1:] - (n[:-1] + d_n(n[:-1], th[:-1])),
+                # n[1:] - g_fcn(ca.vertcat(n[:-1], th[:-1])),
 
                 # boundary constraints
-                n[0], 
-                n[-1]
+                n[0], th[0],
+                n[-1], th[-1]
             ) \
+    
     }
+    
+# nlp = {\
+#     'x': ca.vertcat(n),
+#     'f': ca.sumsqr(track_length(n)),
+#     'g': ca.vertcat(
+#                 # dynamic constraints
+#                 # th[1:] - (th[:-1] + d_th(vs[:-1], d[:-1])),
+#                 # n[1:] - (d_n(n[:-1], th[:-1])),
+
+#                 # boundary constraints
+#                 n[0], 
+#                 n[-1]
+#             ) \
+#     }
 
 S = ca.nlpsol('S', 'ipopt', nlp)
 
@@ -161,11 +166,11 @@ S = ca.nlpsol('S', 'ipopt', nlp)
 # d0 = atan(l * (th0[1:] - th0[:-1]) / vs[:-1])
 # d0 = np.insert(np.array(d0), -1, 0)
 
-# x0 = ca.vertcat(n0, th0)
-x0 = ca.vertcat(n0)
+x0 = ca.vertcat(n0, th0)
+# x0 = ca.vertcat(n0)
 
-lbx = [-n_max]*N #+ [-np.pi]*N 
-ubx = [n_max]*N #+[np.pi]*N 
+lbx = [-n_max]*N + [-np.pi]*N 
+ubx = [n_max]*N +[np.pi]*N 
 
 r = S(x0=x0, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
 
