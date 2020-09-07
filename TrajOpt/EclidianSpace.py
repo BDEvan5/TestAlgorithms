@@ -83,7 +83,7 @@ ones = np.ones(N)
 
 # define symbols
 n = ca.MX.sym('n', N)
-t = ca.MX.sym('t', N)
+dt = ca.MX.sym('t', N)
 v = ca.MX.sym('v', N)
 th = ca.MX.sym('th', N)
 a = ca.MX.sym('a', N)
@@ -92,19 +92,20 @@ d = ca.MX.sym('d', N)
 
 
 nlp = {\
-    'x': ca.vertcat(n, t, v, th, a, d),
+    'x': ca.vertcat(n, dt, v, th, a, d),
     # 'f': ca.sumsqr(track_length(n)),
-    'f': t[-1],
+    'f': ca.sum1(dt),
     'g': ca.vertcat(
                 # dynamic constraints
                 n[1:] - (n[:-1] + d_n(n[:-1], th[:-1])),
-                th[1:] - (th[:-1] + d_th(v[:-1], d[:-1]) * (t[1:] - t[:-1])),
-                v[1:] - (v[:-1] + a[:-1] * (t[1:] - t[:-1])),
-                t[1:] - (t[:-1] + d_t(n, v[:-1])),
+                th[1:] - (th[:-1] + d_th(v[:-1], d[:-1]) * (dt[:-1])),
+                v[1:] - (v[:-1] + a[:-1] * dt[:-1]),
+                # t[1:] - (t[:-1] + d_t(n, v[:-1])),
+                dt[:-1] - (d_t(n, v[:-1])),
 
                 # boundary constraints
-                n[0], d[0], v[0] - 1, t[0],
-                n[-1], th[-1], d[-1]
+                n[0], d[0], v[0] - 1, 
+                n[-1], th[-1], d[-1], dt[-1]
             ) \
     
     }
@@ -142,7 +143,7 @@ a0.append(0) # last a
 
 t0 = [0]
 for i in range(N-1):
-    new_t = t0[-1] + sls[i] / v0[i]
+    new_t =  sls[i] / v0[i] # t0[-1] 
     t0.append(new_t)
 
 
@@ -186,25 +187,25 @@ plt.title("Race line")
 
 plt.figure(2)
 plt.title('Velocities and As')
-plt.plot(times, velocities)
-plt.plot(times, accs)
+plt.plot(np.cumsum(times), velocities)
+plt.plot(np.cumsum(times), accs)
 
 plt.pause(0.001)
 
-# plt.figure(3)
-# plt.title('Thetas')
-# plt.plot(times, thetas)
+plt.figure(3)
+plt.title('Thetas')
+plt.plot(np.cumsum(times), thetas)
 
-# plt.pause(0.0001)
+plt.pause(0.0001)
 
 # plt.figure(4)
-# plt.title('Deltas')
-# plt.plot(times, deltas)
+plt.title('Deltas')
+plt.plot(np.cumsum(times), deltas)
 
-# plt.pause(0.001)
+plt.pause(0.001)
 
-plt.figure(5)
-plt.title('Times')
-plt.plot(times, np.cumsum(times))
+# plt.figure(5)
+# plt.title('Times')
+# plt.plot(times, np.cumsum(times))
 
 plt.show()

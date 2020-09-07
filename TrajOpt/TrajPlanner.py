@@ -260,7 +260,7 @@ def change_widths(track):
         new_track[i+1, 2] = r
         new_track[i+1, 3] = l
 
-    plot_track(new_track)
+    # plot_track(new_track)
 
     return new_track
 
