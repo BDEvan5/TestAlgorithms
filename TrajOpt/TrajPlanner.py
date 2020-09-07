@@ -84,8 +84,8 @@ def generate_bounds(track:np.ndarray, normvec):
     return l, r
 
 def generate_raceline(track:np.ndarray, n_set, normvec):
-    lx = track[:, 0] + n_set * normvec[:, 0]
-    ly = track[:, 1] + n_set * normvec[:, 1]
+    lx = track[:, 0] + n_set[:, 0] * normvec[:, 0]
+    ly = track[:, 1] + n_set[:, 0] * normvec[:, 1]
 
     l = np.concatenate((lx[:, None], ly[:, None]), axis=-1)
     
@@ -190,7 +190,7 @@ def plot_track(track):
     plt.show()
 
 def plot_race_line(track, n_set):
-    track = np.vstack((track, track[-1, :]))
+    # track = np.vstack((track, track[-1, :]))
 
     # x, y, normvec = calc_splines(track)
     normvec = calc_my_nvecs(track)
@@ -202,10 +202,14 @@ def plot_race_line(track, n_set):
         xs = [l[i, 0], r[i, 0]]
         ys = [l[i, 1], r[i, 1]]
         plt.plot(xs, ys)
+    
+    plt.pause(0.001)
 
     plt.plot(track[:, 0], track[:, 1], linewidth=1)
     plt.plot(l[:, 0], l[:, 1], linewidth=1)
     plt.plot(r[:, 0], r[:, 1], linewidth=1)
+
+    plt.pause(0.001)
 
     line = generate_raceline(track, n_set, normvec)
     plt.plot(line[:, 0], line[:, 1], linewidth=2)
