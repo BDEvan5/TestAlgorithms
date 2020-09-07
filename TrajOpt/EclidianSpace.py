@@ -66,13 +66,47 @@ d_n = ca.Function('d_n', [n_f, th_f], [sls/ca.tan(th_ns[:-1] - th_f)])
 track_length = ca.Function('length', [n_f_a], [dis(o_x_s(n_f_a[:-1]), o_x_e(n_f_a[1:]), 
                             o_y_s(n_f_a[:-1]), o_y_e(n_f_a[1:]))])
 
-# d_th = ca.Function('d_th', [v_f, d_f], [v_f/l * tan(d_f)])
-
+# d_th = ca.Function('d_th', [v_f, d_f], [v_f/l * ca.tan(d_f)])
+d_th = ca.Function('d_th', [d_f], [np.ones(N-1) * 2 / l * ca.tan(d_f)])
 
 
 ones = np.ones(N)
+vs = ones * 2
+
+
+# define symbols
+n = ca.MX.sym('n', N)
+# t = ca.MX.sym('t', N)
+# v = ca.MX.sym('v', N)
+th = ca.MX.sym('th', N)
+# a = ca.MX.sym('a', N)
+d = ca.MX.sym('d', N)
+
+
+
+nlp = {\
+    'x': ca.vertcat(n, th, d),
+    'f': ca.sumsqr(track_length(n)),
+    'g': ca.vertcat(
+                # dynamic constraints
+                # th[1:] - (th[:-1] + d_th(vs[:-1], d[:-1])),
+                th[1:] - (th[:-1] + d_th(d[:-1]) * 1),
+                n[1:] - (n[:-1] + d_n(n[:-1], th[:-1])),
+
+                # boundary constraints
+                n[0], d[0],
+                n[-1], th[-1], d[-1]
+            ) \
+    
+    }
+
+
+S = ca.nlpsol('S', 'ipopt', nlp)
+
+
 # n0 = ones*0
 n0 = np.random.uniform(-1, 1, N)
+
 
 th0 = []
 
@@ -83,44 +117,14 @@ for i in range(N-1):
 th0.append(0)
 th0 = np.array(th0)
 
-
-# define symbols
-n = ca.MX.sym('n', N)
-# t = ca.MX.sym('t', N)
-# v = ca.MX.sym('v', N)
-th = ca.MX.sym('th', N)
-# a = ca.MX.sym('a', N)
-# d = ca.MX.sym('d', N)
-
-
-
-nlp = {\
-    'x': ca.vertcat(n, th),
-    'f': ca.sumsqr(track_length(n)),
-    'g': ca.vertcat(
-                # dynamic constraints
-                # th[1:] - (th[:-1] + d_th(vs[:-1], d[:-1])),
-                n[1:] - (n[:-1] + d_n(n[:-1], th[:-1])),
-
-                # boundary constraints
-                n[0], 
-                n[-1], th[-1]
-            ) \
-    
-    }
-
-
-S = ca.nlpsol('S', 'ipopt', nlp)
-
-
 # calculate this afterwards
-# d0 = atan(l * (th0[1:] - th0[:-1]) / vs[:-1])
-# d0 = np.insert(np.array(d0), -1, 0)
+d0 = ca.atan(l * (th0[1:] - th0[:-1]) / vs[:-1])
+d0 = np.insert(np.array(d0), -1, 0)
 
-x0 = ca.vertcat(n0, th0)
+x0 = ca.vertcat(n0, th0, d0)
 
-lbx = [-n_max]*N + [-np.pi]*N 
-ubx = [n_max]*N +[np.pi]*N 
+lbx = [-n_max]*N + [-np.pi]*N + [-d_max] * N
+ubx = [n_max]*N +[np.pi]*N + [d_max] * N
 
 r = S(x0=x0, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
 
