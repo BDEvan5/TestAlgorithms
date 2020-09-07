@@ -19,7 +19,9 @@ track = np.array([[1, 1],
 ws = np.ones_like(track) * 1
 track = np.concatenate([track, ws], axis=-1)
 
-# plot_track(track)
+track = fix_up_track(track, 5)
+
+# plot_track(track, True)
 
 
 """Other track"""
@@ -146,8 +148,6 @@ for i in range(N-1):
 
 x0 = ca.vertcat(n0, t0, v0, th0, a0, d0)
 
-# lbx = [-n_max]*N + [-np.pi]*N + [-d_max] * N
-# ubx = [n_max]*N +[np.pi]*N + [d_max] * N
 lbx = [-n_max]*N + [0] * N + [0] * N + [-np.pi]*N + [-a_max] *N + [-d_max] * N
 ubx = [n_max]*N + [np.inf] * N + [v_max] * N + [np.pi]*N + [a_max] *N + [d_max] * N
 
@@ -157,7 +157,7 @@ r = S(x0=x0, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
 print(f"Solution found")
 x_opt = r['x']
 # print(x_opt)
-track[:, 2:4] = np.ones_like(track[:, 2:4])
+# track[:, 2:4] = np.ones_like(track[:, 2:4])
 
 n_set = np.array(x_opt[:N])
 times = np.array(x_opt[N:2*N])
@@ -167,19 +167,19 @@ accs = np.array(x_opt[4*N:5*N])
 deltas = np.array(x_opt[5*N:6*N])
 
 
-print(f"Ns")
-print(n_set)
+# print(f"Ns")
+# print(n_set)
 
 print(f"ts")
 print(times)
-print(f"velocities")
-print(velocities)
-print("thetas")
-print(thetas)
-print("Accs")
-print(accs)
-print(f"Deltas")
-print(deltas)
+# print(f"velocities")
+# print(velocities)
+# print("thetas")
+# print(thetas)
+# print("Accs")
+# print(accs)
+# print(f"Deltas")
+# print(deltas)
 
 plot_race_line(np.array(track), n_set)
 plt.title("Race line")
@@ -191,18 +191,20 @@ plt.plot(times, accs)
 
 plt.pause(0.001)
 
-plt.figure(3)
-plt.title('Thetas')
-plt.plot(times, thetas)
+# plt.figure(3)
+# plt.title('Thetas')
+# plt.plot(times, thetas)
 
-plt.pause(0.0001)
+# plt.pause(0.0001)
 
-plt.figure(4)
-plt.title('Deltas')
-plt.plot(times, deltas)
+# plt.figure(4)
+# plt.title('Deltas')
+# plt.plot(times, deltas)
 
-plt.pause(0.001)
+# plt.pause(0.001)
 
-
+plt.figure(5)
+plt.title('Times')
+plt.plot(times, np.cumsum(times))
 
 plt.show()

@@ -168,7 +168,7 @@ def calc_my_nvecs(track):
     return normvec
 
 
-def plot_track(track):
+def plot_track(track, wait=False):
     # track = np.vstack((track, track[-1, :]))
 
     # x, y, normvec = calc_splines(track)
@@ -181,13 +181,14 @@ def plot_track(track):
     for i in range(len(l)):
         xs = [l[i, 0], r[i, 0]]
         ys = [l[i, 1], r[i, 1]]
-        plt.plot(xs, ys)
-    plt.plot(track[:, 0], track[:, 1], linewidth=1)
-    plt.plot(l[:, 0], l[:, 1], linewidth=2)
-    plt.plot(r[:, 0], r[:, 1], linewidth=2)
+        plt.plot(xs, ys, '--')
+    plt.plot(track[:, 0], track[:, 1], linewidth=2)
+    plt.plot(l[:, 0], l[:, 1], linewidth=0.8)
+    plt.plot(r[:, 0], r[:, 1], linewidth=0.8)
 
     plt.pause(0.001)
-    plt.show()
+    if wait:
+        plt.show()
 
 def plot_race_line(track, n_set, wait=False):
     # track = np.vstack((track, track[-1, :]))
@@ -218,6 +219,61 @@ def plot_race_line(track, n_set, wait=False):
     if wait:
         plt.show()
 
+
+def add_points(track, points_add):
+    N = len(track)
+    new_track = np.zeros(((N-1) * points_add + 1, 4))
+    for i in range(N-1):
+        # new_track[i * points_add] = track[i]
+        for j in range(points_add):
+            new_x = (-track[i, 0] + track[i+1, 0]) * j/points_add + track[i, 0]
+            new_y = (-track[i, 1] + track[i+1, 1]) * j/points_add + track[i, 1]
+            new_l = (-track[i, 2] + track[i+1, 2]) * j/points_add + track[i, 2]
+            new_r = (-track[i, 3] + track[i+1, 3]) * j/points_add + track[i, 3]
+            new_pt = np.array([new_x, new_y, new_l, new_r])
+            new_track[i * points_add + j] = new_pt
+
+    new_track[-1] = track[-1]
+
+
+
+    return new_track
+
+def change_widths(track):
+    w = track[0, 2] + track[0, 3]
+    N = len(track)
+
+    new_track = np.zeros_like(track, dtype=float)
+    new_track[:, 0:2] = track[:, 0:2]
+    new_track[0, 2:4] = track[0, 2:4]
+    new_track[-1, 2:4] = track[-1, 2:4]
+
+    for i in range(N-2):
+        d0 = lib.get_distance(track[i, 0:2], track[i+1, 0:2])
+        b0 = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
+        b01 = lib.get_bearing(track[i, 0:2], track[i+2, 0:2])
+        th01 = b01 - b0
+
+        d = d0 * np.sin(th01)
+        l = w/2 - d*0.5
+        r = w - l
+        new_track[i+1, 2] = r
+        new_track[i+1, 3] = l
+
+    plot_track(new_track)
+
+    return new_track
+
+
+
+def fix_up_track(track, points_add=5):
+    # track = x, y, wl, wr
+
+    track = change_widths(track)
+
+    track = add_points(track, points_add)
+
+    return track
 
 """Optimisation stufff"""
 def calc_spline_lengths(coeffs_x, coeffs_y):
