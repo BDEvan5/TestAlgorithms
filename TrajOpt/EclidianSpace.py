@@ -15,40 +15,24 @@ track = np.array([[1, 1],
                 [6, 6], 
                 [7, 6]])
 
-# track = np.array([[1, 1], 
-#                 [1, 2], 
-#                 [2, 3], 
-#                 [2, 4], 
-#                 [3, 5], 
-#                 [3, 6], 
-#                 [2, 7], 
-#                 [2, 8], 
-#                 [1, 9]])
-
-
 
 ws = np.ones_like(track) * 1
 track = np.concatenate([track, ws], axis=-1)
 
 # plot_track(track)
-nvecs = calc_my_nvecs(track)
 
 
 """Other track"""
 # track = load_track('TrajOpt/RaceTrack1000_abscissa.csv',show=False)
 # track = track/10
-# cs, cy, nvecs = calc_splines(track[:, 0:2])
+# # cs, cy, nvecs = calc_splines(track[:, 0:2])
 
+nvecs = calc_my_nvecs(track)
 txs = track[:, 0]
 tys = track[:, 1]
-# ms = nvecs[:, 1] / nvecs[:, 0] # dy/dx
-# cs = tys / (txs * ms)
 
 th_ns = [lib.get_bearing([0, 0], nvecs[i, 0:2]) for i in range(len(nvecs))]
 sls = np.sqrt(np.sum(np.power(np.diff(track[:, :2], axis=0), 2), axis=1))
-
-# track[:, 2] = ms 
-# track[:, 3] = cs
 
 l = 0.33
 a_max = 7.5
@@ -70,27 +54,12 @@ x1_f = ca.MX.sym('x1_f', N-1)
 y0_f = ca.MX.sym('y0_f', N-1)
 y1_f = ca.MX.sym('y1_f', N-1)
 
-c0_f = ca.MX.sym('c0', N-1)
-c1_f = ca.MX.sym('c1', N-1)
-m0_f = ca.MX.sym('m0', N-1)
-m1_f = ca.MX.sym('m1', N-1)
-
 o_x_s = ca.Function('o_x', [n_f], [track[:-1, 0] + nvecs[:-1, 0] * n_f])
 o_y_s = ca.Function('o_y', [n_f], [track[:-1, 1] + nvecs[:-1, 1] * n_f])
 o_x_e = ca.Function('o_x', [n_f], [track[1:, 0] + nvecs[1:, 0] * n_f])
 o_y_e = ca.Function('o_y', [n_f], [track[1:, 1] + nvecs[1:, 1] * n_f])
 
-# get_c = ca.Function('get_c', [m0_f, x_f, y_f], [y_f / (m0_f * x_f)])
 dis = ca.Function('dis', [x0_f, x1_f, y0_f, y1_f], [ca.sqrt((x1_f-x0_f)**2 + (y1_f-y0_f)**2)])
-
-# inter_x = ca.Function('inter', [c0_f, m0_f], [(cs[1:] - c0_f)/(m0_f - ms[1:])])
-# inter_y = ca.Function('inter', [c0_f, m0_f], [(c0_f*ms[1:] - cs[1:]*m0_f) / (ms[1:] - m0_f)])
-
-# get_nx = ca.Function('nx', [n_f, th_f], [inter_x(get_c(ca.tan(th_f), o_x_s(n_f), o_y_s(n_f)), ca.tan(th_f))])
-# get_ny = ca.Function('ny', [n_f, th_f], [inter_y(get_c(ca.tan(th_f), o_x_s(n_f), o_y_s(n_f)), ca.tan(th_f))])
-
-
-# d_n = ca.Function('d_n', [n_f, th_f], [dis(get_nx(n_f, th_f), track[1:, 0], get_ny(n_f, th_f), track[1:, 1])])
 
 d_n = ca.Function('d_n', [n_f, th_f], [sls/ca.tan(th_ns[:-1] - th_f)])
 
@@ -114,10 +83,6 @@ for i in range(N-1):
 th0.append(0)
 th0 = np.array(th0)
 
-# arg = ca.vertcat(n0[:-1], th0[:-1])
-# print(g_fcn(arg))
-
-
 
 # define symbols
 n = ca.MX.sym('n', N)
@@ -136,28 +101,14 @@ nlp = {\
                 # dynamic constraints
                 # th[1:] - (th[:-1] + d_th(vs[:-1], d[:-1])),
                 n[1:] - (n[:-1] + d_n(n[:-1], th[:-1])),
-                # n[1:] - g_fcn(ca.vertcat(n[:-1], th[:-1])),
 
                 # boundary constraints
-                n[0], th[0],
+                n[0], 
                 n[-1], th[-1]
             ) \
     
     }
-    
-# nlp = {\
-#     'x': ca.vertcat(n),
-#     'f': ca.sumsqr(track_length(n)),
-#     'g': ca.vertcat(
-#                 # dynamic constraints
-#                 # th[1:] - (th[:-1] + d_th(vs[:-1], d[:-1])),
-#                 # n[1:] - (d_n(n[:-1], th[:-1])),
 
-#                 # boundary constraints
-#                 n[0], 
-#                 n[-1]
-#             ) \
-#     }
 
 S = ca.nlpsol('S', 'ipopt', nlp)
 
@@ -167,7 +118,6 @@ S = ca.nlpsol('S', 'ipopt', nlp)
 # d0 = np.insert(np.array(d0), -1, 0)
 
 x0 = ca.vertcat(n0, th0)
-# x0 = ca.vertcat(n0)
 
 lbx = [-n_max]*N + [-np.pi]*N 
 ubx = [n_max]*N +[np.pi]*N 
@@ -175,15 +125,11 @@ ubx = [n_max]*N +[np.pi]*N
 r = S(x0=x0, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
 
 print(f"Solution found")
-# print(r)
 x_opt = r['x']
 
-
-
-# track = load_track('TrajOpt/RaceTrack1000_abscissa.csv',show=False)
 track[:, 2:4] = np.ones_like(track[:, 2:4])
 n_set = np.array(x_opt[:N])
-print(n_set)
+# print(n_set)
 
 plot_race_line(np.array(track), n_set)
 

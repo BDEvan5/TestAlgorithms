@@ -201,18 +201,18 @@ def plot_race_line(track, n_set):
     for i in range(len(l)):
         xs = [l[i, 0], r[i, 0]]
         ys = [l[i, 1], r[i, 1]]
-        plt.plot(xs, ys)
+        plt.plot(xs, ys, '--')
     
     plt.pause(0.001)
 
-    plt.plot(track[:, 0], track[:, 1], linewidth=1)
-    plt.plot(l[:, 0], l[:, 1], linewidth=1)
-    plt.plot(r[:, 0], r[:, 1], linewidth=1)
+    plt.plot(track[:, 0], track[:, 1], linewidth=2)
+    plt.plot(l[:, 0], l[:, 1], linewidth=0.5)
+    plt.plot(r[:, 0], r[:, 1], linewidth=0.5)
 
     plt.pause(0.001)
 
     line = generate_raceline(track, n_set, normvec)
-    plt.plot(line[:, 0], line[:, 1], linewidth=2)
+    plt.plot(line[:, 0], line[:, 1], linewidth=4)
 
     plt.pause(0.001)
     plt.show()
