@@ -53,8 +53,13 @@ def get_bearing(x1=[0, 0], x2=[0, 0]):
     grad = get_gradient(x1, x2)
     dx = x2[0] - x1[0]
     th_start_end = np.arctan(grad)
-    if th_start_end > 0:
-        if dx >= 0:
+    if dx == 0:
+        if x2[1] - x1[1] > 0:
+            th_start_end = 0
+        else:
+            th_start_end = np.pi
+    elif th_start_end > 0:
+        if dx > 0:
             th_start_end = np.pi / 2 - th_start_end
         else:
             th_start_end = -np.pi/2 - th_start_end
@@ -65,6 +70,11 @@ def get_bearing(x1=[0, 0], x2=[0, 0]):
             th_start_end = - np.pi/2 - th_start_end
 
     return th_start_end
+
+def find_sign(x):
+    if x == 0:
+        return 1
+    return abs(x) / x
 
 def theta_to_xy(theta):
     x = np.sin(theta)

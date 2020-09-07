@@ -160,11 +160,25 @@ def calc_my_nvecs(track):
     normvec = []
     th = lib.get_bearing(track[0, 0:2], track[1, 0:2])
     normvec.append(lib.theta_to_xy(th + np.pi/2))
+    ths = []
+    bs = []
     for i in range(len(track) - 2):
-        th0 = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
-        th1 = lib.get_bearing(track[i+1, 0:2], track[i+2, 0:2])
-        th = (th0 + th1) / 2
-        normvec.append(lib.theta_to_xy(th + np.pi/2))
+        # th0 = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
+        # th1 = lib.get_bearing(track[i+1, 0:2], track[i+2, 0:2])
+        # if lib.find_sign(th0) != lib.find_sign(th1):
+        #     if lib.find_sign(th0) < 0:
+        #         th0 = th0 + 2*np.pi
+        #     else:
+        #         th1 = th1 + 2*np.pi
+            # th0 = lib.limit_theta(th0)
+
+        # th = (th0 + th1) / 2
+        th = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
+        bs.append(th)
+        new_th = th + np.pi/2
+        new_th = lib.limit_theta(new_th)
+        ths.append(new_th)
+        normvec.append(lib.theta_to_xy(new_th))
     
     th = lib.get_bearing(track[-2, 0:2], track[-1, 0:2])
     normvec.append(lib.theta_to_xy(th + np.pi/2)) # last point
@@ -182,6 +196,9 @@ def plot_spline_track(track, wait=False):
     plt.plot(c_line[:, 0], c_line[:, 1], linewidth=2)
     plt.plot(l_line[:, 0], l_line[:, 1], linewidth=1)
     plt.plot(r_line[:, 0], r_line[:, 1], linewidth=1)
+
+    cxs, cys = [], []
+
 
     if wait:
         plt.show()
@@ -276,7 +293,7 @@ def change_widths(track):
         new_track[i+1, 2] = r
         new_track[i+1, 3] = l
 
-    plot_track(new_track)
+    # plot_track(new_track)
 
     return new_track
 
@@ -285,9 +302,13 @@ def change_widths(track):
 def fix_up_track(track, points_add=5):
     # track = x, y, wl, wr
 
-    track = change_widths(track)
+    # plot_spline_track(track, False)
+    # plot_track(track, True)
+    # track = change_widths(track)
+    # plot_track(track, True)
 
     track = add_points(track, points_add)
+    # plot_track(track, True)
 
     return track
 

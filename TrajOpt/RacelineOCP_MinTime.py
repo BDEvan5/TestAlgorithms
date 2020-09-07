@@ -5,30 +5,33 @@ from matplotlib import pyplot as plt
 from TrajPlanner import *
 
 """Simple track"""
-track = np.array([[1, 1], 
-                [1, 2], 
-                [2, 3], 
-                [2, 4], 
-                [3, 5], 
-                [4, 5], 
-                [5, 5], 
-                [6, 6], 
-                [7, 6]])
+# track = np.array([[1, 1], 
+#                 [1, 2], 
+#                 [2, 3], 
+#                 [2, 4], 
+#                 [3, 5], 
+#                 [4, 5], 
+#                 [5, 5], 
+#                 [6, 6], 
+#                 [7, 6]])
 
 
-ws = np.ones_like(track) * 1
-track = np.concatenate([track, ws], axis=-1)
-
-track = fix_up_track(track, 5)
-
-# plot_track(track, True)
-plot_spline_track(track, True)
+# ws = np.ones_like(track) * 1
+# track = np.concatenate([track, ws], axis=-1)
 
 
 """Other track"""
-# track = load_track('TrajOpt/RaceTrack1000_abscissa.csv',show=False)
-# track = track/10
+track = load_track('TrajOpt/RaceTrack1000_abscissa.csv',show=False)
+track = track/10
+
 # # cs, cy, nvecs = calc_splines(track[:, 0:2])
+
+# track = fix_up_track(track, 5)
+
+# plot_track(track, True)
+# plot_spline_track(track, False)
+
+
 
 nvecs = calc_my_nvecs(track)
 txs = track[:, 0]
@@ -36,7 +39,6 @@ tys = track[:, 1]
 
 th_ns = [lib.get_bearing([0, 0], nvecs[i, 0:2]) for i in range(len(nvecs))]
 sls = np.sqrt(np.sum(np.power(np.diff(track[:, :2], axis=0), 2), axis=1))
-
 
 
 l = 0.33
@@ -101,7 +103,6 @@ nlp = {\
                 n[1:] - (n[:-1] + d_n(n[:-1], th[:-1])),
                 th[1:] - (th[:-1] + d_th(v[:-1], d[:-1]) * (dt[:-1])),
                 v[1:] - (v[:-1] + a[:-1] * dt[:-1]),
-                # t[1:] - (t[:-1] + d_t(n, v[:-1])),
                 dt[:-1] - (d_t(n, v[:-1])),
 
                 # boundary constraints
@@ -153,7 +154,7 @@ x0 = ca.vertcat(n0, t0, v0, th0, a0, d0)
 lbx = [-n_max]*N + [0] * N + [0] * N + [-np.pi]*N + [-a_max] *N + [-d_max] * N
 ubx = [n_max]*N + [np.inf] * N + [v_max] * N + [np.pi]*N + [a_max] *N + [d_max] * N
 
-
+plot_race_line(np.array(track), n0[:, None])
 r = S(x0=x0, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
 
 print(f"Solution found")
@@ -172,8 +173,8 @@ deltas = np.array(x_opt[5*N:6*N])
 # print(f"Ns")
 # print(n_set)
 
-print(f"ts")
-print(times)
+# print(f"ts")
+# print(times)
 # print(f"velocities")
 # print(velocities)
 # print("thetas")
