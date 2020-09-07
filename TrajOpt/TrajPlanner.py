@@ -158,10 +158,15 @@ def calc_splines(path):
 
 def calc_my_nvecs(track):
     normvec = []
-    for i in range(len(track) - 1):
-        th = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
+    th = lib.get_bearing(track[0, 0:2], track[1, 0:2])
+    normvec.append(lib.theta_to_xy(th + np.pi/2))
+    for i in range(len(track) - 2):
+        th0 = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
+        th1 = lib.get_bearing(track[i+1, 0:2], track[i+2, 0:2])
+        th = (th0 + th1) / 2
         normvec.append(lib.theta_to_xy(th + np.pi/2))
     
+    th = lib.get_bearing(track[-2, 0:2], track[-1, 0:2])
     normvec.append(lib.theta_to_xy(th + np.pi/2)) # last point
     normvec = np.array(normvec)
 
@@ -249,18 +254,18 @@ def change_widths(track):
     new_track[-1, 2:4] = track[-1, 2:4]
 
     for i in range(N-2):
-        d0 = lib.get_distance(track[i, 0:2], track[i+1, 0:2])
         b0 = lib.get_bearing(track[i, 0:2], track[i+1, 0:2])
-        b01 = lib.get_bearing(track[i, 0:2], track[i+2, 0:2])
-        th01 = b01 - b0
+        b1 = lib.get_bearing(track[i+1, 0:2], track[i+2, 0:2])
+        ddth = b0 - b1
+        l =  w/2 + w/2 * ddth /(np.pi/2) 
 
-        d = d0 * np.sin(th01)
-        l = w/2 - d*0.5
+        # d = d0 * np.sin(th01)
+        # l = w/2 - d*0.5
         r = w - l
         new_track[i+1, 2] = r
         new_track[i+1, 3] = l
 
-    # plot_track(new_track)
+    plot_track(new_track)
 
     return new_track
 
@@ -275,7 +280,7 @@ def fix_up_track(track, points_add=5):
 
     return track
 
-"""Optimisation stufff"""
+
 def calc_spline_lengths(coeffs_x, coeffs_y):
     no_splines = coeffs_x.shape[0]
     spline_lengths = np.zeros(no_splines)
@@ -298,222 +303,7 @@ def calc_spline_lengths(coeffs_x, coeffs_y):
 
     return spline_lengths
 
-def normalize_psi(psi):
-    psi_out = np.sign(psi) * np.mod(np.abs(psi), 2 * math.pi)
 
-    # restrict psi to [-pi,pi]
-    if type(psi_out) is np.ndarray:
-        psi_out[psi_out >= math.pi] -= 2 * math.pi
-        psi_out[psi_out < -math.pi] += 2 * math.pi
-
-    else:
-        if psi_out >= math.pi:
-            psi_out -= 2 * math.pi
-        elif psi_out < -math.pi:
-            psi_out += 2 * math.pi
-
-    return psi_out
-
-def calc_head_curve(path, seg_lengths):
-    no_points = path.shape[0]
-    stepsize_psi_preview = 1.0
-    stepsize_psi_review = 1.0
-    stepsize_curv_preview = 2.0
-    stepsize_curv_review = 2.0
-
-    # prework
-    ind_step_preview_psi = round(stepsize_psi_preview / float(np.average(seg_lengths)))
-    ind_step_review_psi = round(stepsize_psi_review / float(np.average(seg_lengths)))
-    ind_step_preview_curv = round(stepsize_curv_preview / float(np.average(seg_lengths)))
-    ind_step_review_curv = round(stepsize_curv_review / float(np.average(seg_lengths)))
-
-    ind_step_preview_psi = max(ind_step_preview_psi, 1)
-    ind_step_review_psi = max(ind_step_review_psi, 1)
-    ind_step_preview_curv = max(ind_step_preview_curv, 1)
-    ind_step_review_curv = max(ind_step_review_curv, 1)
-
-    steps_tot_psi = ind_step_preview_psi + ind_step_review_psi
-    steps_tot_curv = ind_step_preview_curv + ind_step_review_curv
-
-    # heading
-    path_temp = np.vstack((path[-ind_step_review_psi:], path, path[:ind_step_preview_psi]))
-    tangvecs = np.stack((path_temp[steps_tot_psi:, 0] - path_temp[:-steps_tot_psi, 0],
-                            path_temp[steps_tot_psi:, 1] - path_temp[:-steps_tot_psi, 1]), axis=1)
-
-    # calculate psi of tangent vectors (pi/2 must be substracted due to our convention that psi = 0 is north)
-    psi = np.arctan2(tangvecs[:, 1], tangvecs[:, 0]) - math.pi / 2
-    psi = normalize_psi(psi)
-
-    # curvature
-    psi_temp = np.insert(psi, 0, psi[-ind_step_review_curv:])
-    psi_temp = np.append(psi_temp, psi[:ind_step_preview_curv])
-
-    # calculate delta psi
-    delta_psi = np.zeros(no_points)
-
-    for i in range(no_points):
-        delta_psi[i] = normalize_psi(psi_temp[i + steps_tot_curv] - psi_temp[i])
-
-    # calculate kappa
-    s_points_cl = np.cumsum(seg_lengths)
-    s_points_cl = np.insert(s_points_cl, 0, 0.0)
-    s_points = s_points_cl[:-1]
-    s_points_cl_reverse = np.flipud(-np.cumsum(np.flipud(seg_lengths)))  # should not include 0.0 as last value
-
-    s_points_temp = np.insert(s_points, 0, s_points_cl_reverse[-ind_step_review_curv:])
-    s_points_temp = np.append(s_points_temp, s_points_cl[-1] + s_points[:ind_step_preview_curv])
-
-    delta_psi = delta_psi[:-1]
-    kappa = delta_psi / (s_points_temp[steps_tot_curv:] - s_points_temp[:-steps_tot_curv])
-
-    return psi, kappa
-
-def opt_mintime(reftrack, c_x, c_y, normvecs):
-    no_points_orig = reftrack.shape[0]
-    discr_points = np.arange(reftrack.shape[0])
-    reftrack = np.vstack((reftrack, reftrack[0, :]))
-
-    spline_lengths = calc_spline_lengths(c_x, c_y)
-
-    # track heading - closed
-    psi, kappa_refline = calc_head_curve(reftrack[:, :2], spline_lengths)
-
-    # close track
-    kappa_refline_cl = np.append(kappa_refline, kappa_refline[0])
-    discr_points_cl = np.append(discr_points, no_points_orig)  # add virtual index of last/first point for closed track
-    w_tr_left_cl = np.append(reftrack[:, 3], reftrack[0, 3])
-    w_tr_right_cl = np.append(reftrack[:, 2], reftrack[0, 2])
-
-    h = 3
-    steps = [i for i in range(discr_points_cl.size)]
-    N = steps[-1]
-    s_opt = np.asarray(discr_points_cl) * h
-
-    kappa_interp = ca.interpolant('kappa_interp', 'linear', [steps], kappa_refline_cl)
-    w_tr_left_interp = ca.interpolant('w_tr_left_interp', 'linear', [steps], w_tr_left_cl)
-    w_tr_right_interp = ca.interpolant('w_tr_right_interp', 'linear', [steps], w_tr_right_cl)
-
-"""For later"""
-     # ------------------------------------------------------------------------------------------------------------------
-    # DIRECT GAUSS-LEGENDRE COLLOCATION --------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
-
-    # # degree of interpolating polynomial
-    # d = 3
-
-    # # legendre collocation points
-    # tau = np.append(0, ca.collocation_points(d, 'legendre'))
-
-    # # coefficient matrix for formulating the collocation equation
-    # C = np.zeros((d + 1, d + 1))
-
-    # # coefficient matrix for formulating the collocation equation
-    # D = np.zeros(d + 1)
-
-    # # coefficient matrix for formulating the collocation equation
-    # B = np.zeros(d + 1)
-
-    # # construct polynomial basis
-    # for j in range(d + 1):
-    #     # construct Lagrange polynomials to get the polynomial basis at the collocation point
-    #     p = np.poly1d([1])
-    #     for r in range(d + 1):
-    #         if r != j:
-    #             p *= np.poly1d([1, -tau[r]]) / (tau[j] - tau[r])
-
-    #     # evaluate polynomial at the final time to get the coefficients of the continuity equation
-    #     D[j] = p(1.0)
-
-    #     # evaluate time derivative of polynomial at collocation points to get the coefficients of continuity equation
-    #     p_der = np.polyder(p)
-    #     for r in range(d + 1):
-    #         C[j, r] = p_der(tau[r])
-
-    #     # evaluate integral of the polynomial to get the coefficients of the quadrature function
-    #     pint = np.polyint(p)
-    #     B[j] = pint(1.0)
-
-    # # state variables
-    # nx = 5
-    # nx_pwr = 0
-
-    # # velocity [m/s]
-    # v_n = ca.SX.sym('v_n')
-    # v_s = 5
-    # v = v_s * v_n
-
-    # # side slip angle [rad]
-    # beta_n = ca.SX.sym('beta_n')
-    # beta_s = 0.5
-    # beta = beta_s * beta_n
-
-    # # yaw rate [rad/s]
-    # omega_z_n = ca.SX.sym('omega_z_n')
-    # omega_z_s = 1
-    # omega_z = omega_z_s * omega_z_n
-
-    # # lateral distance to reference line (positive = left) [m]
-    # n_n = ca.SX.sym('n_n')
-    # n_s = 1
-    # n = n_s * n_n
-
-    # # relative angle to tangent on reference line [rad]
-    # xi_n = ca.SX.sym('xi_n')
-    # xi_s = 1.0
-    # xi = xi_s * xi_n
-
-    # # ------------------------------------------------------------------------------------------------------------------
-    # # CONTROL VARIABLES ------------------------------------------------------------------------------------------------
-    # # ------------------------------------------------------------------------------------------------------------------
-
-    # # number of control variables
-    # nu = 4
-
-    # # steer angle [rad]
-    # delta_n = ca.SX.sym('delta_n')
-    # delta_s = 0.5
-    # delta = delta_s * delta_n
-
-    # # positive longitudinal force (drive) [N]
-    # f_drive_n = ca.SX.sym('f_drive_n')
-    # f_drive_s = 7500.0
-    # f_drive = f_drive_s * f_drive_n
-
-    # # negative longitudinal force (brake) [N]
-    # f_brake_n = ca.SX.sym('f_brake_n')
-    # f_brake_s = 20000.0
-    # f_brake = f_brake_s * f_brake_n
-
-    # # lateral wheel load transfer [N]
-    # gamma_y_n = ca.SX.sym('gamma_y_n')
-    # gamma_y_s = 5000.0
-    # gamma_y = gamma_y_s * gamma_y_n
-
-    # g = 9.81
-    
-    
-
-    # # scaling factors for control variables
-    # u_s = np.array([delta_s, f_drive_s, f_brake_s, gamma_y_s])
-
-    # # put all controls together
-    # u = ca.vertcat(delta_n, f_drive_n, f_brake_n, gamma_y_n)
-
-def opt_mindist(reftrack, c_x, c_y, normvecs):
-    no_points_orig = reftrack.shape[0]
-    discr_points = np.arange(reftrack.shape[0])
-    reftrack = np.vstack((reftrack, reftrack[0, :]))
-
-    spline_lengths = calc_spline_lengths(c_x, c_y)
-
-    # track heading - closed
-    psi, kappa_refline = calc_head_curve(reftrack[:, :2], spline_lengths)
-
-    # close track
-    kappa_refline_cl = np.append(kappa_refline, kappa_refline[0])
-    discr_points_cl = np.append(discr_points, no_points_orig) 
-
-    
 
 
 

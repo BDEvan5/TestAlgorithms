@@ -21,7 +21,7 @@ track = np.concatenate([track, ws], axis=-1)
 
 track = fix_up_track(track, 5)
 
-# plot_track(track, True)
+plot_track(track, True)
 
 
 """Other track"""
