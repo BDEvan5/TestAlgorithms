@@ -189,7 +189,7 @@ def plot_track(track):
     plt.pause(0.001)
     plt.show()
 
-def plot_race_line(track, n_set):
+def plot_race_line(track, n_set, wait=False):
     # track = np.vstack((track, track[-1, :]))
 
     # x, y, normvec = calc_splines(track)
@@ -215,7 +215,8 @@ def plot_race_line(track, n_set):
     plt.plot(line[:, 0], line[:, 1], linewidth=4)
 
     plt.pause(0.001)
-    plt.show()
+    if wait:
+        plt.show()
 
 
 """Optimisation stufff"""
