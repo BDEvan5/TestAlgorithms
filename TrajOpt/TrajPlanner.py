@@ -172,6 +172,19 @@ def calc_my_nvecs(track):
 
     return normvec
 
+def plot_spline_track(track, wait=False):
+    nvs = calc_my_nvecs(track)
+    c_line = track[:, 0:2]
+    l_line = c_line - np.array([nvs[:, 0] * track[:, 2], nvs[:, 1] * track[:, 2]]).T
+    r_line = c_line + np.array([nvs[:, 0] * track[:, 3], nvs[:, 1] * track[:, 3]]).T
+
+    plt.figure(1)
+    plt.plot(c_line[:, 0], c_line[:, 1], linewidth=2)
+    plt.plot(l_line[:, 0], l_line[:, 1], linewidth=1)
+    plt.plot(r_line[:, 0], r_line[:, 1], linewidth=1)
+
+    if wait:
+        plt.show()
 
 def plot_track(track, wait=False):
     # track = np.vstack((track, track[-1, :]))
@@ -259,8 +272,6 @@ def change_widths(track):
         ddth = b0 - b1
         l =  w/2 + w/2 * ddth /(np.pi/2) 
 
-        # d = d0 * np.sin(th01)
-        # l = w/2 - d*0.5
         r = w - l
         new_track[i+1, 2] = r
         new_track[i+1, 3] = l
