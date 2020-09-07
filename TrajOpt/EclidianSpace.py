@@ -91,7 +91,8 @@ d = ca.MX.sym('d', N)
 
 nlp = {\
     'x': ca.vertcat(n, t, v, th, a, d),
-    'f': ca.sumsqr(track_length(n)),
+    # 'f': ca.sumsqr(track_length(n)),
+    'f': t[-1],
     'g': ca.vertcat(
                 # dynamic constraints
                 n[1:] - (n[:-1] + d_n(n[:-1], th[:-1])),
