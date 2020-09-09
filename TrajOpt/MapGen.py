@@ -23,7 +23,7 @@ def load_track(filename='TrajOpt/RaceTrack1000_abscissa.csv', show=True):
 
 
 def interp_track(track):
-    N = 100 
+    N = 200 
     seg_lengths = np.sqrt(np.sum(np.power(np.diff(track[:, :2], axis=0), 2), axis=1))
     dists_cum = np.cumsum(seg_lengths)
     dists_cum = np.insert(dists_cum, 0, 0.0)
@@ -57,7 +57,7 @@ def check_nvec_cross(p1, v1, pt2, v2, w):
 
 
 def create_nvecs(track):
-    N = 100
+    N = 200
     seg_lengths = np.sqrt(np.sum(np.power(np.diff(track[:, :2], axis=0), 2), axis=1))
     length = sum(seg_lengths)
     ds = length / N
