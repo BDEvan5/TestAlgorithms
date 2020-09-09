@@ -97,7 +97,9 @@ def run_map_gen():
     path = load_track()
     path = interp_track(path)
     track = create_nvecs(path)
-    plot_track(track, True)
+    # plot_track(track, True)
+
+    return track
 
 
 if __name__ == "__main__":
