@@ -77,9 +77,8 @@ def create_nvecs(track):
 
     return return_track
 
-def plot_track(track, wait=False):
+def plot_track(track, width=False, wait=False):
     c_line = track[:, 0:2]
-    width = 5
     l_line = c_line - np.array([track[:, 2] * width, track[:, 3] * width]).T
     r_line = c_line + np.array([track[:, 2] * width, track[:, 3] * width]).T
 
@@ -87,6 +86,18 @@ def plot_track(track, wait=False):
     plt.plot(c_line[:, 0], c_line[:, 1], linewidth=2)
     plt.plot(l_line[:, 0], l_line[:, 1], linewidth=1)
     plt.plot(r_line[:, 0], r_line[:, 1], linewidth=1)
+
+    plt.pause(0.0001)
+    if wait:
+        plt.show()
+
+def plot_race_line(track, nset, width=5, wait=False):
+    plot_track(track, width, False)
+
+    plt.figure(1)
+    deviation = np.array([track[:, 2] * nset[:, 0], track[:, 3] * nset[:, 0]]).T
+    r_line = track[:, 0:2] + deviation
+    plt.plot(r_line[:, 0], r_line[:, 1], linewidth=3)
 
     plt.pause(0.0001)
     if wait:
