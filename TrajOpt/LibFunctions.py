@@ -98,6 +98,13 @@ def limit_theta(theta):
 
     return theta
 
+def limit_multi_theta(thetas):
+    ths = []
+    for theta in thetas:
+        th = limit_theta(theta)
+        ths.append(th)
+    ret_th = np.array(ths)
+    return ret_th
 
 def plot(values, moving_avg_period=10, title="Results", figure_n=2):
     plt.figure(figure_n)
