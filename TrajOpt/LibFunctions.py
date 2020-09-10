@@ -1,5 +1,7 @@
 import numpy as np
 from matplotlib import  pyplot as plt
+import math
+import cmath
 
 
 def add_locations(x1=[0, 0], x2=[0, 0], dx=1):
@@ -98,6 +100,15 @@ def limit_theta(theta):
 
     return theta
 
+def add_angles_complex(a1, a2):
+    c1 = cmath.rect(1, a1)
+    c2 = cmath.rect(1, a2)
+
+    sum_c = c1 + c2
+    phase = cmath.phase(sum_c)
+
+    return phase
+
 def limit_multi_theta(thetas):
     ths = []
     for theta in thetas:
@@ -129,51 +140,6 @@ def plot_no_avg(values, moving_avg_period=10, title="Results", figure_n=2):
     plt.plot(values)
 
     plt.pause(0.0001)
-
-def plot_comp(values1, values2,  moving_avg_period=10, title="Results", figure_n=2):
-    plt.figure(figure_n)
-    plt.clf()        
-    plt.title(title)
-    plt.xlabel('Episode')
-    plt.ylabel('Duration')
-    plt.plot(values1)
-
-    moving_avg = get_moving_average(moving_avg_period, values1)
-    # plt.plot(moving_avg)    
-
-    plt.plot(values2)
-    moving_avg = get_moving_average(moving_avg_period, values2)
-    # plt.plot(moving_avg)    
- 
-    plt.legend(['RL Moving Avg', "Classical Moving Avg"])
-    # plt.legend(['RL Agent', 'RL Moving Avg', 'Classical Agent', "Classical Moving Avg"])
-    plt.pause(0.001)
-
-def plot_three(values1, values2, values3, moving_avg_period=10, title="Results", figure_n=2):
-    plt.figure(figure_n)
-    plt.clf()        
-    plt.title(title)
-    plt.xlabel('Episode')
-    plt.ylabel('Duration')
-
-    plt.ylim(-2, 2)
-
-    plt.plot(values1)
-    # moving_avg = get_moving_average(moving_avg_period, values1)
-    # plt.plot(moving_avg)    
-
-    plt.plot(values2)
-    # moving_avg = get_moving_average(moving_avg_period, values2)
-    # plt.plot(moving_avg)    
-
-    plt.plot(values3)
-    # moving_avg = get_moving_average(moving_avg_period, values2)
-    # plt.plot(moving_avg)    
- 
-    # plt.legend(['RL Moving Avg', "Classical Moving Avg"])
-    # plt.legend(['RL Agent', 'RL Moving Avg', 'Classical Agent', "Classical Moving Avg"])
-    plt.legend(['Values', 'Q_vals', 'Loss'])
-    plt.pause(0.001)
 
 def get_moving_average(period, values):
 
@@ -208,5 +174,11 @@ def plot_multi(value_array, title="Results", figure_n=2, ylim=[-1, 1]):
     plt.pause(0.0001)
 
 
+
+"""Testing"""
+def test():
+    print(add_angles_complex(3, -2.5))
+
+
 if __name__ == "__main__":
-    pass
+    test()

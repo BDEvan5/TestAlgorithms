@@ -182,6 +182,8 @@ def MinCurvatureSteer():
     x1_f = ca.MX.sym('x1_f', N-1)
     y0_f = ca.MX.sym('y0_f', N-1)
     y1_f = ca.MX.sym('y1_f', N-1)
+    th1_f = ca.MX.sym('th_f', N-1)
+    th2_f = ca.MX.sym('th_f', N-1)
 
     o_x_s = ca.Function('o_x', [n_f], [track[:-1, 0] + nvecs[:-1, 0] * n_f])
     o_y_s = ca.Function('o_y', [n_f], [track[:-1, 1] + nvecs[:-1, 1] * n_f])
@@ -196,8 +198,13 @@ def MinCurvatureSteer():
     # d_n = ca.Function('d_n', [n_f, th_f], [sls/ca.tan(th_ns[:-1] - th_f)])
     # sls_f = ca.Function('sls_f', [n_f_a], )
     # get_th = ca.Function('gth', [th_f], [th_ns[:-1] - th_f])
-    get_th = ca.Function('gth', [th_f], [th_f - th_ns[:-1] + (np.pi/2)*np.ones(N-1)])
-    d_n = ca.Function('d_n', [n_f_a, th_f], [track_length(n_f_a)/ca.tan(get_th(th_f))])
+    # get_th_n = ca.Function('gth', [th_f], [th_f - th_ns[:-1] + (np.pi/2)*np.ones(N-1)])
+    add_cmplx = ca.Function('a_cpx', [th1_f, th2_f], [ca.atan((ca.sin(th1_f) + ca.sin(th2_f))/(ca.cos(th1_f) + ca.cos(th2_f)))])
+    sub_cmplx = ca.Function('a_cpx', [th1_f, th2_f], [ca.atan((ca.sin(th1_f) - ca.sin(th2_f))/
+                            ca.if_else(ca.fabs(ca.cos(th1_f) - ca.cos(th2_f)) > 0.01, ca.cos(th1_f) - ca.cos(th2_f), 0.01))])
+    get_th_n = ca.Function('gth', [th_f], [sub_cmplx(th_f, th_ns[:-1]) ])
+    
+    d_n = ca.Function('d_n', [n_f_a, th_f], [track_length(n_f_a)/ca.tan(get_th_n(th_f))])
     d_t = ca.Function('d_t', [n_f_a, v_f], [dis(o_x_e(n_f_a[1:]), o_x_s(n_f_a[:-1]), o_y_e(n_f_a[1:]), o_y_s(n_f_a[:-1]))/v_f ])
     d_th = ca.Function('d_th', [v_f, d_f], [v_f/l * ca.tan(d_f)])
 
@@ -249,8 +256,17 @@ def MinCurvatureSteer():
     th0.append(0)
     th0 = np.array(th0)
 
-    d0 = ca.atan(l * lib.limit_multi_theta(th0[1:] - th0[:-1]) / (ones * 3)[:-1])
-    d0 = np.insert(np.array(d0), -1, 0)
+    # d0 = ca.atan(l * lib.limit_multi_theta(th0[1:] - th0[:-1]) / (ones * 3)[:-1])
+    d0 = []
+    for i in range(N-1):
+        angle = lib.add_angles_complex(th0[i+1], -th0[i])
+        d00 = ca.atan(l * (angle) / 3)
+        d0.append(d00)
+    d0.append(0)
+    d0 = np.array(d0)
+
+    # d0 = ca.atan(l * lib.limit_multi_theta(th0[1:] - th0[:-1]) / (ones * 3)[:-1])
+    # d0 = np.insert(np.array(d0), -1, 0)
 
     v0, a0 = [1], []
     for i in range(N-1):
