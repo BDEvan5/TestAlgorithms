@@ -224,11 +224,6 @@ def MinCurvatureSteer():
     d_th = ca.Function('d_th', [v_f, d_f], [v_f/l * ca.tan(d_f)])
 
 
-
-    grad = ca.Function('grad', [n_f_a], [(o_y_e(n_f_a[1:]) - o_y_s(n_f_a[:-1]))/ca.fmax(o_x_e(n_f_a[1:]) - o_x_s(n_f_a[:-1]), 0.01*np.ones(N-1) )])
-    curvature = ca.Function('curv', [n_f_a], [grad(n_f_a)[1:] - grad(n_f_a)[:-1]]) # changes in grad
-   
-
     # define symbols
     n = ca.MX.sym('n', N)
     dt = ca.MX.sym('t', N)
@@ -243,7 +238,9 @@ def MinCurvatureSteer():
     # 'f': ca.sumsqr(curvature(n)),
     # 'f': ca.sumsqr(track_length(n)),
     # 'f': ca.sumsqr(d) - ca.sumsqr(v),
-    'f':  - ca.sumsqr(v),
+    # 'f': ca.sumsqr(sub_cmplx(th[1:], th[:-1])),
+    'f': ca.sum1(dt),
+    # 'f':  - ca.sumsqr(v),
     'g': ca.vertcat(
                 # dynamic constraints
                 n[1:] - (n[:-1] + d_n(n, th[:-1])),
@@ -252,7 +249,7 @@ def MinCurvatureSteer():
                 dt[:-1] - (d_t(n, v[:-1])),
 
                 # boundary constraints
-                n[0], d[0], v[0] - 1, 
+                n[0], v[0] - 1, 
                 n[-1], th[-1], d[-1], dt[-1]
             ) \
     
@@ -365,5 +362,5 @@ def plot_x_opt(x_opt, track):
 
 if __name__ == "__main__":
     # MinDistance()
-    MinCurvature()
-    # MinCurvatureSteer()
+    # MinCurvature()
+    MinCurvatureSteer()
