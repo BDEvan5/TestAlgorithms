@@ -123,7 +123,8 @@ def MinCurvature():
 
     nlp = {\
     'x': ca.vertcat(n, th),
-    'f': ca.sumsqr(curvature(n)),
+    # 'f': ca.sumsqr(curvature(n)),
+    'f': ca.sumsqr(sub_cmplx(th[1:], th[:-1])), 
     # 'f': ca.sumsqr(track_length(n)),
     'g': ca.vertcat(
                 # dynamic constraints
@@ -153,6 +154,8 @@ def MinCurvature():
 
     lbx = [-n_max] * N + [-np.pi]*N 
     ubx = [n_max] * N + [np.pi]*N 
+
+    print(curvature(n0))
 
     r = S(x0=x0, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
 
