@@ -124,8 +124,8 @@ def MinCurvature():
     nlp = {\
     'x': ca.vertcat(n, th),
     # 'f': ca.sumsqr(curvature(n)),
-    'f': ca.sumsqr(sub_cmplx(th[1:], th[:-1])), 
-    # 'f': ca.sumsqr(track_length(n)),
+    # 'f': ca.sumsqr(sub_cmplx(th[1:], th[:-1])), 
+    'f': ca.sumsqr(track_length(n)),
     'g': ca.vertcat(
                 # dynamic constraints
                 n[1:] - (n[:-1] + d_n(n, th[:-1])),
@@ -164,6 +164,8 @@ def MinCurvature():
 
     n_set = np.array(x_opt[:N])
     thetas = np.array(x_opt[1*N:2*N])
+
+    print(sub_cmplx(thetas[1:], thetas[:-1]))
 
     plot_race_line(np.array(track), n_set, width=3, wait=True)
     
