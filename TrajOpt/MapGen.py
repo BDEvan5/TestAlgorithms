@@ -57,7 +57,7 @@ def check_nvec_cross(p1, v1, pt2, v2, w):
 
 
 def create_nvecs(track):
-    N = 100
+    N = 120
     seg_lengths = np.sqrt(np.sum(np.power(np.diff(track[:, :2], axis=0), 2), axis=1))
     length = sum(seg_lengths)
     ds = length / N

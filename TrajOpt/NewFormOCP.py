@@ -76,7 +76,7 @@ def MinCurvature():
     tys = track[:, 1]
     nvecs = track[:, 2:4]
     th_ns = [lib.get_bearing([0, 0], nvecs[i, 0:2]) for i in range(len(nvecs))]
-    sls = np.sqrt(np.sum(np.power(np.diff(track[:, :2], axis=0), 2), axis=1))
+    # sls = np.sqrt(np.sum(np.power(np.diff(track[:, :2], axis=0), 2), axis=1))
 
 
     n_max = 3
@@ -124,15 +124,15 @@ def MinCurvature():
     nlp = {\
     'x': ca.vertcat(n, th),
     # 'f': ca.sumsqr(curvature(n)),
-    # 'f': ca.sumsqr(sub_cmplx(th[1:], th[:-1])), 
-    'f': ca.sumsqr(track_length(n)),
+    'f': ca.sumsqr(sub_cmplx(th[1:], th[:-1])), 
+    # 'f': ca.sumsqr(track_length(n)),
     'g': ca.vertcat(
                 # dynamic constraints
                 n[1:] - (n[:-1] + d_n(n, th[:-1])),
 
                 # boundary constraints
                 n[0], th[0],
-                n[-1], th[-1],
+                n[-1], #th[-1],
             ) \
     
     }
@@ -165,7 +165,7 @@ def MinCurvature():
     n_set = np.array(x_opt[:N])
     thetas = np.array(x_opt[1*N:2*N])
 
-    print(sub_cmplx(thetas[1:], thetas[:-1]))
+    # print(sub_cmplx(thetas[1:], thetas[:-1]))
 
     plot_race_line(np.array(track), n_set, width=3, wait=True)
     
