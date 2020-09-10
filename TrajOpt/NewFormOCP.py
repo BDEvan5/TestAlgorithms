@@ -210,8 +210,8 @@ def MinCurvatureSteer():
 
 
 
-    # grad = ca.Function('grad', [n_f_a], [(o_y_e(n_f_a[1:]) - o_y_s(n_f_a[:-1]))/ca.fmax(o_x_e(n_f_a[1:]) - o_x_s(n_f_a[:-1]), 0.1*np.ones(N-1) )])
-    # curvature = ca.Function('curv', [n_f_a], [grad(n_f_a)[1:] - grad(n_f_a)[:-1]]) # changes in grad
+    grad = ca.Function('grad', [n_f_a], [(o_y_e(n_f_a[1:]) - o_y_s(n_f_a[:-1]))/ca.fmax(o_x_e(n_f_a[1:]) - o_x_s(n_f_a[:-1]), 0.1*np.ones(N-1) )])
+    curvature = ca.Function('curv', [n_f_a], [grad(n_f_a)[1:] - grad(n_f_a)[:-1]]) # changes in grad
    
 
     # define symbols
@@ -225,8 +225,8 @@ def MinCurvatureSteer():
 
     nlp = {\
     'x': ca.vertcat(n, dt, v, th, a, d),
-    # 'f': ca.sumsqr(curvature(n)),
-    'f': ca.sumsqr(track_length(n)),
+    'f': ca.sumsqr(curvature(n)),
+    # 'f': ca.sumsqr(track_length(n)),
     # 'f': ca.sumsqr(d) - ca.sumsqr(v),
     # 'f':  - ca.sumsqr(v),
     'g': ca.vertcat(
@@ -256,17 +256,13 @@ def MinCurvatureSteer():
     th0.append(0)
     th0 = np.array(th0)
 
-    # d0 = ca.atan(l * lib.limit_multi_theta(th0[1:] - th0[:-1]) / (ones * 3)[:-1])
     d0 = []
     for i in range(N-1):
-        angle = lib.add_angles_complex(th0[i+1], -th0[i])
+        angle = lib.sub_angles_complex(th0[i+1], th0[i])
         d00 = ca.atan(l * (angle) / 3)
         d0.append(d00)
     d0.append(0)
     d0 = np.array(d0)
-
-    # d0 = ca.atan(l * lib.limit_multi_theta(th0[1:] - th0[:-1]) / (ones * 3)[:-1])
-    # d0 = np.insert(np.array(d0), -1, 0)
 
     v0, a0 = [1], []
     for i in range(N-1):
@@ -290,12 +286,20 @@ def MinCurvatureSteer():
     ubx = [n_max]*N + [np.inf] * N + [v_max] * N + [np.pi]*N + [a_max] *N + [d_max] * N
 
     print(th_ns[:-1] - th0[:-1])
+    print(f" ")
+    print(sub_cmplx(th_ns[:-1], th0[:-1]))
+
+    plot_x_opt(x0, track)
 
     r = S(x0=x0, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
 
     print(f"Solution found")
     x_opt = r['x']
 
+    plot_x_opt(x_opt, track)
+
+def plot_x_opt(x_opt, track):
+    N = len(track)
     n_set = np.array(x_opt[:N])
     times = np.array(x_opt[N:2*N])
     velocities = np.array(x_opt[2*N:3*N])
@@ -315,6 +319,8 @@ def MinCurvatureSteer():
     plt.figure(3)
     plt.title('Thetas')
     plt.plot(thetas)
+    plt.plot(thetas, 'x', markersize=12)
+    
 
     plt.pause(0.0001)
 
@@ -328,6 +334,16 @@ def MinCurvatureSteer():
     plt.title('N set')
     plt.plot(n_set, 'x')
     plt.plot(n_set)
+
+    plt.figure(6)
+    plt.title('d theta')
+    # plt.plot(thetas[1:] - thetas[:-1])
+    d_ths = [lib.sub_angles_complex(thetas[i+1], thetas[i]) for i in range(N-1)]
+    d_ths.append(0)
+    plt.plot(d_ths)
+
+    p_ths = np.concatenate([thetas, np.array(d_ths)[:, None]], axis=-1)
+    print(f"Thetas: {p_ths}")
 
     plt.show()
 

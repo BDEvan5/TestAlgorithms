@@ -101,13 +101,31 @@ def limit_theta(theta):
     return theta
 
 def add_angles_complex(a1, a2):
-    c1 = cmath.rect(1, a1)
-    c2 = cmath.rect(1, a2)
+    c1 = complex(math.cos(a1), math.sin(a1))
+    c2 = complex(math.cos(a2), math.sin(a2))
 
     sum_c = c1 + c2
     phase = cmath.phase(sum_c)
 
     return phase
+    
+def sub_angles_complex(a1, a2): 
+    real = math.cos(a1) * math.cos(a2) + math.sin(a1) * math.sin(a2)
+    im = - math.cos(a1) * math.sin(a2) + math.sin(a1) * math.cos(a2)
+
+    cpx = complex(real, im)
+    phase = cmath.phase(cpx)
+
+    return phase
+    
+# def sub_angles_complex(a1, a2):
+#     c1 = complex(math.cos(a1), math.sin(a1))
+#     c2 = complex(math.cos(a2), math.sin(a2))
+
+#     sum_c = c1 * c2.conjugate()
+#     phase = cmath.phase(sum_c)
+
+#     return phase
 
 def limit_multi_theta(thetas):
     ths = []
@@ -178,6 +196,7 @@ def plot_multi(value_array, title="Results", figure_n=2, ylim=[-1, 1]):
 """Testing"""
 def test():
     print(add_angles_complex(3, -2.5))
+    print(sub_angles_complex(3, -2.5))
 
 
 if __name__ == "__main__":
