@@ -91,6 +91,8 @@ def MinCurvature():
     x1_f = ca.MX.sym('x1_f', N-1)
     y0_f = ca.MX.sym('y0_f', N-1)
     y1_f = ca.MX.sym('y1_f', N-1)
+    th1_f = ca.MX.sym('y1_f', N-1)
+    th2_f = ca.MX.sym('y1_f', N-1)
 
     o_x_s = ca.Function('o_x', [n_f], [track[:-1, 0] + nvecs[:-1, 0] * n_f])
     o_y_s = ca.Function('o_y', [n_f], [track[:-1, 1] + nvecs[:-1, 1] * n_f])
@@ -102,7 +104,13 @@ def MinCurvature():
     track_length = ca.Function('length', [n_f_a], [dis(o_x_s(n_f_a[:-1]), o_x_e(n_f_a[1:]), 
                                 o_y_s(n_f_a[:-1]), o_y_e(n_f_a[1:]))])
 
-    d_n = ca.Function('d_n', [n_f, th_f], [sls/ca.tan(th_ns[:-1] - th_f)])
+    real = ca.Function('real', [th1_f, th2_f], [ca.cos(th1_f)*ca.cos(th2_f) + ca.sin(th1_f)*ca.sin(th2_f)])
+    im = ca.Function('im', [th1_f, th2_f], [-ca.cos(th1_f)*ca.sin(th2_f) + ca.sin(th1_f)*ca.cos(th2_f)])
+
+    sub_cmplx = ca.Function('a_cpx', [th1_f, th2_f], [ca.atan(im(th1_f, th2_f)/real(th1_f, th2_f))])
+    get_th_n = ca.Function('gth', [th_f], [sub_cmplx(ca.pi*np.ones(N-1), sub_cmplx(th_f, th_ns[:-1]))])
+
+    d_n = ca.Function('d_n', [n_f_a, th_f], [track_length(n_f_a)/ca.tan(get_th_n(th_f))])
     # curvature = ca.Function('curv', [th_f_a], [th_f_a[1:] - th_f_a[:-1]])
     grad = ca.Function('grad', [n_f_a], [(o_y_e(n_f_a[1:]) - o_y_s(n_f_a[:-1]))/ca.fmax(o_x_e(n_f_a[1:]) - o_x_s(n_f_a[:-1]), 0.1*np.ones(N-1) )])
     curvature = ca.Function('curv', [n_f_a], [grad(n_f_a)[1:] - grad(n_f_a)[:-1]]) # changes in grad
@@ -119,7 +127,7 @@ def MinCurvature():
     # 'f': ca.sumsqr(track_length(n)),
     'g': ca.vertcat(
                 # dynamic constraints
-                n[1:] - (n[:-1] + d_n(n[:-1], th[:-1])),
+                n[1:] - (n[:-1] + d_n(n, th[:-1])),
 
                 # boundary constraints
                 n[0], th[0],
@@ -199,10 +207,12 @@ def MinCurvatureSteer():
     # sls_f = ca.Function('sls_f', [n_f_a], )
     # get_th = ca.Function('gth', [th_f], [th_ns[:-1] - th_f])
     # get_th_n = ca.Function('gth', [th_f], [th_f - th_ns[:-1] + (np.pi/2)*np.ones(N-1)])
-    add_cmplx = ca.Function('a_cpx', [th1_f, th2_f], [ca.atan((ca.sin(th1_f) + ca.sin(th2_f))/(ca.cos(th1_f) + ca.cos(th2_f)))])
-    sub_cmplx = ca.Function('a_cpx', [th1_f, th2_f], [ca.atan((ca.sin(th1_f) - ca.sin(th2_f))/
-                            ca.if_else(ca.fabs(ca.cos(th1_f) - ca.cos(th2_f)) > 0.01, ca.cos(th1_f) - ca.cos(th2_f), 0.01))])
-    get_th_n = ca.Function('gth', [th_f], [sub_cmplx(th_f, th_ns[:-1]) ])
+
+    real = ca.Function('real', [th1_f, th2_f], [ca.cos(th1_f)*ca.cos(th2_f) + ca.sin(th1_f)*ca.sin(th2_f)])
+    im = ca.Function('im', [th1_f, th2_f], [-ca.cos(th1_f)*ca.sin(th2_f) + ca.sin(th1_f)*ca.cos(th2_f)])
+
+    sub_cmplx = ca.Function('a_cpx', [th1_f, th2_f], [ca.atan(im(th1_f, th2_f)/real(th1_f, th2_f))])
+    get_th_n = ca.Function('gth', [th_f], [sub_cmplx(th_f, th_ns[:-1])])
     
     d_n = ca.Function('d_n', [n_f_a, th_f], [track_length(n_f_a)/ca.tan(get_th_n(th_f))])
     d_t = ca.Function('d_t', [n_f_a, v_f], [dis(o_x_e(n_f_a[1:]), o_x_s(n_f_a[:-1]), o_y_e(n_f_a[1:]), o_y_s(n_f_a[:-1]))/v_f ])
@@ -210,7 +220,7 @@ def MinCurvatureSteer():
 
 
 
-    grad = ca.Function('grad', [n_f_a], [(o_y_e(n_f_a[1:]) - o_y_s(n_f_a[:-1]))/ca.fmax(o_x_e(n_f_a[1:]) - o_x_s(n_f_a[:-1]), 0.1*np.ones(N-1) )])
+    grad = ca.Function('grad', [n_f_a], [(o_y_e(n_f_a[1:]) - o_y_s(n_f_a[:-1]))/ca.fmax(o_x_e(n_f_a[1:]) - o_x_s(n_f_a[:-1]), 0.01*np.ones(N-1) )])
     curvature = ca.Function('curv', [n_f_a], [grad(n_f_a)[1:] - grad(n_f_a)[:-1]]) # changes in grad
    
 
@@ -225,10 +235,10 @@ def MinCurvatureSteer():
 
     nlp = {\
     'x': ca.vertcat(n, dt, v, th, a, d),
-    'f': ca.sumsqr(curvature(n)),
+    # 'f': ca.sumsqr(curvature(n)),
     # 'f': ca.sumsqr(track_length(n)),
     # 'f': ca.sumsqr(d) - ca.sumsqr(v),
-    # 'f':  - ca.sumsqr(v),
+    'f':  - ca.sumsqr(v),
     'g': ca.vertcat(
                 # dynamic constraints
                 n[1:] - (n[:-1] + d_n(n, th[:-1])),
@@ -285,16 +295,15 @@ def MinCurvatureSteer():
     lbx = [-n_max]*N + [0] * N + [0] * N + [-np.pi]*N + [-a_max] *N + [-d_max] * N
     ubx = [n_max]*N + [np.inf] * N + [v_max] * N + [np.pi]*N + [a_max] *N + [d_max] * N
 
-    print(th_ns[:-1] - th0[:-1])
-    print(f" ")
-    print(sub_cmplx(th_ns[:-1], th0[:-1]))
-
-    plot_x_opt(x0, track)
+    # plot_x_opt(x0, track)
 
     r = S(x0=x0, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
 
     print(f"Solution found")
     x_opt = r['x']
+
+    plt.figure(7)
+    plt.plot(track_length(x_opt[:N]))
 
     plot_x_opt(x_opt, track)
 
@@ -342,8 +351,8 @@ def plot_x_opt(x_opt, track):
     d_ths.append(0)
     plt.plot(d_ths)
 
-    p_ths = np.concatenate([thetas, np.array(d_ths)[:, None]], axis=-1)
-    print(f"Thetas: {p_ths}")
+    # p_ths = np.concatenate([thetas, np.array(d_ths)[:, None]], axis=-1)
+    # print(f"Thetas: {p_ths}")
 
     plt.show()
 
@@ -351,5 +360,5 @@ def plot_x_opt(x_opt, track):
 
 if __name__ == "__main__":
     # MinDistance()
-    # MinCurvature()
-    MinCurvatureSteer()
+    MinCurvature()
+    # MinCurvatureSteer()

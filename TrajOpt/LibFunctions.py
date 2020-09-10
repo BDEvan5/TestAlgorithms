@@ -113,8 +113,9 @@ def sub_angles_complex(a1, a2):
     real = math.cos(a1) * math.cos(a2) + math.sin(a1) * math.sin(a2)
     im = - math.cos(a1) * math.sin(a2) + math.sin(a1) * math.cos(a2)
 
-    cpx = complex(real, im)
-    phase = cmath.phase(cpx)
+    # cpx = complex(real, im)
+    # phase = cmath.phase(cpx)
+    phase = math.atan(im/real)
 
     return phase
     
