@@ -96,10 +96,12 @@ def smooth_track(track):
 
     # plot_race_line(track, wait=True)
 
-def spline_track(track):
-    N = len(track)
-    xs = track[:, 0]
-    ys = track[:, 1]
+# def spline_track(track):
+#     N = len(track)
+#     xs = track[:, 0]
+#     ys = track[:, 1]
+
+
 
 def get_nvec(x0, x2):
     th = lib.get_bearing(x0, x2)
@@ -115,18 +117,29 @@ def create_nvecs(track):
     new_track, nvecs = [], []
     new_track.append(track[0, :])
     nvecs.append(get_nvec(track[0, :], track[1, :]))
-    s = 0
     for i in range(len(track)-1):
-        nvec = get_nvec(new_track[max(i-5, 0)], track[min((i+5, N-5)), :])
-        nvecs.append(nvec)
-        new_track.append(track[i])
+        pt1 = new_track[max(-1, 0)]
+        pt2 = track[min((i, N)), :]
+        pt3 = track[min((i+1, N-1)), :]
+
+        th1 = lib.get_bearing(pt1, pt2)
+        th2 = lib.get_bearing(pt2, pt3)
+        if th1 == th2:
+            pass
+        else:
+            th = lib.add_angles_complex(th1, th2) / 2
+
+            new_th = th + np.pi/2
+            nvec = lib.theta_to_xy(new_th)
+            nvecs.append(nvec)
+            new_track.append(track[i])
 
     return_track = np.concatenate([new_track, nvecs], axis=-1)
 
     return return_track
 
         
-def plot_race_line(track, nset=None, width=5, wait=False):
+def plot_race_line(track, nset=None, wait=False):
     c_line = track[:, 0:2]
     l_line = c_line - np.array([track[:, 2] * track[:, 4], track[:, 3] * track[:, 4]]).T
     r_line = c_line + np.array([track[:, 2] * track[:, 5], track[:, 3] * track[:, 5]]).T
@@ -152,9 +165,9 @@ def set_widths(track, width=5):
     ls, rs = [width], [width]
     for i in range(N-2):
         dth = lib.sub_angles_complex(ths[i+1], ths[i])
-        dw = dth / (np.pi/2) * width
-        l = width +  dw
-        r = width - dw
+        dw = dth / (np.pi) * width
+        l = width #+  dw
+        r = width #- dw
         ls.append(l)
         rs.append(r)
 
@@ -171,9 +184,9 @@ def set_widths(track, width=5):
 def run_map_gen():
     N = 200
     path = load_track()
-    path = interp_track(path, N)
+    # path = interp_track(path, N)
 
-    track = smooth_track(path)
+    # track = smooth_track(path)
 
     track = create_nvecs(path)
     track = set_widths(track, 5)
