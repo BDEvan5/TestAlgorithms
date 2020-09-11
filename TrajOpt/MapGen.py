@@ -22,8 +22,7 @@ def load_track(filename='TrajOpt/RaceTrack1000_abscissa.csv', show=True):
     return track
 
 
-def interp_track(track):
-    N = 200 
+def interp_track(track, N):
     seg_lengths = np.sqrt(np.sum(np.power(np.diff(track[:, :2], axis=0), 2), axis=1))
     dists_cum = np.cumsum(seg_lengths)
     dists_cum = np.insert(dists_cum, 0, 0.0)
@@ -40,6 +39,68 @@ def interp_track(track):
 
     return interp_track
 
+def smooth_track(track):
+    N = len(track)
+    xs = track[:, 0]
+    ys = track[:, 1]
+
+    th1_f = ca.MX.sym('y1_f', N-2)
+    th2_f = ca.MX.sym('y2_f', N-2)
+    x_f = ca.MX.sym('x_f', N)
+    y_f = ca.MX.sym('y_f', N)
+
+    real = ca.Function('real', [th1_f, th2_f], [ca.cos(th1_f)*ca.cos(th2_f) + ca.sin(th1_f)*ca.sin(th2_f)])
+    im = ca.Function('im', [th1_f, th2_f], [-ca.cos(th1_f)*ca.sin(th2_f) + ca.sin(th1_f)*ca.cos(th2_f)])
+
+    sub_cmplx = ca.Function('a_cpx', [th1_f, th2_f], [ca.atan(im(th1_f, th2_f)/real(th1_f, th2_f))])
+
+    d_th = ca.Function('d_th', [x_f, y_f], [ca.if_else(ca.fabs(x_f[1:] - x_f[:-1]) < 0.01 ,ca.atan((y_f[1:] - y_f[:-1])/(x_f[1:] - x_f[:-1])), 10000)])
+
+    x = ca.MX.sym('x', N)
+    y = ca.MX.sym('y', N)
+    th = ca.MX.sym('th', N-1)
+
+    B = 5
+    nlp = {\
+        'x': ca.vertcat(x, y, th),
+        'f': ca.sumsqr(sub_cmplx(th[1:], th[:-1])) + B* (ca.sumsqr(x-xs) + ca.sumsqr(y-ys)),
+        # 'f':  B* (ca.sumsqr(x-xs) + ca.sumsqr(y-ys)),
+        'g': ca.vertcat(\
+                th - d_th(x, y),
+                x[0] - xs[0], y[0]- ys[0],
+                x[-1] - xs[-1], y[-1]- ys[-1],
+            )\
+        }
+
+    S = ca.nlpsol('S', 'ipopt', nlp)
+    # th0 = [lib.get_bearing(track[i, 0:2], track[i+1, 0:2]) for i in range(N-1)]
+    th0 = d_th(xs, ys)
+
+    x0 = ca.vertcat(xs, ys, th0)
+
+    lbx = [0] *2* N + [-np.pi]*(N -1)
+    ubx = [100] *2 * N + [np.pi]*(N-1) 
+
+    r = S(x0=x0, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
+
+    print(f"Solution found")
+    x_opt = r['x']
+
+    xs_new = np.array(x_opt[:N])
+    ys_new = np.array(x_opt[N:2*N])
+
+    track[:, 0] = xs_new[:, 0]
+    track[:, 1] = ys_new[:, 0]
+
+    return track
+
+    # plot_race_line(track, wait=True)
+
+def spline_track(track):
+    N = len(track)
+    xs = track[:, 0]
+    ys = track[:, 1]
+
 def get_nvec(x0, x2):
     th = lib.get_bearing(x0, x2)
     new_th = th + np.pi/2
@@ -47,68 +108,78 @@ def get_nvec(x0, x2):
 
     return nvec
 
-def check_nvec_cross(p1, v1, pt2, v2, w):
-    e1 = lib.add_locations(p1, v1*w)
-    e2 = lib.add_locations(p2, v2*w)
-
-
-    e1 = lib.sub_locations(p1, v1*w)
-    e2 = lib.sub_locations(p2, v2*w)
-
 
 def create_nvecs(track):
-    N = 120
-    seg_lengths = np.sqrt(np.sum(np.power(np.diff(track[:, :2], axis=0), 2), axis=1))
-    length = sum(seg_lengths)
-    ds = length / N
+    N = len(track)
 
     new_track, nvecs = [], []
     new_track.append(track[0, :])
     nvecs.append(get_nvec(track[0, :], track[1, :]))
     s = 0
     for i in range(len(track)-1):
-        s = lib.get_distance(new_track[-1], track[i, :])
-        if s > ds:
-            nvec = get_nvec(new_track[-1], track[min((i+5, len(track)-1)), :])
-            nvecs.append(nvec)
-            new_track.append(track[i])
+        nvec = get_nvec(new_track[max(i-5, 0)], track[min((i+5, N-5)), :])
+        nvecs.append(nvec)
+        new_track.append(track[i])
 
     return_track = np.concatenate([new_track, nvecs], axis=-1)
 
     return return_track
 
-def plot_track(track, width=False, wait=False):
+        
+def plot_race_line(track, nset=None, width=5, wait=False):
     c_line = track[:, 0:2]
-    l_line = c_line - np.array([track[:, 2] * width, track[:, 3] * width]).T
-    r_line = c_line + np.array([track[:, 2] * width, track[:, 3] * width]).T
+    l_line = c_line - np.array([track[:, 2] * track[:, 4], track[:, 3] * track[:, 4]]).T
+    r_line = c_line + np.array([track[:, 2] * track[:, 5], track[:, 3] * track[:, 5]]).T
 
     plt.figure(1)
     plt.plot(c_line[:, 0], c_line[:, 1], linewidth=2)
     plt.plot(l_line[:, 0], l_line[:, 1], linewidth=1)
     plt.plot(r_line[:, 0], r_line[:, 1], linewidth=1)
 
-    plt.pause(0.0001)
-    if wait:
-        plt.show()
-
-def plot_race_line(track, nset, width=5, wait=False):
-    plot_track(track, width, False)
-
-    plt.figure(1)
-    deviation = np.array([track[:, 2] * nset[:, 0], track[:, 3] * nset[:, 0]]).T
-    r_line = track[:, 0:2] + deviation
-    plt.plot(r_line[:, 0], r_line[:, 1], linewidth=3)
+    if nset is not None:
+        deviation = np.array([track[:, 2] * nset[:, 0], track[:, 3] * nset[:, 0]]).T
+        r_line = track[:, 0:2] + deviation
+        plt.plot(r_line[:, 0], r_line[:, 1], linewidth=3)
 
     plt.pause(0.0001)
     if wait:
         plt.show()
 
+def set_widths(track, width=5):
+    N = len(track)
+    ths = [lib.get_bearing(track[i, 0:2], track[i+1, 0:2]) for i in range(N-1)]
+
+    ls, rs = [width], [width]
+    for i in range(N-2):
+        dth = lib.sub_angles_complex(ths[i+1], ths[i])
+        dw = dth / (np.pi/2) * width
+        l = width +  dw
+        r = width - dw
+        ls.append(l)
+        rs.append(r)
+
+    ls.append(width)
+    rs.append(width)
+
+    ls = np.array(ls)
+    rs = np.array(rs)
+
+    new_track = np.concatenate([track, ls[:, None], rs[:, None]], axis=-1)
+
+    return new_track
 
 def run_map_gen():
+    N = 200
     path = load_track()
-    path = interp_track(path)
+    path = interp_track(path, N)
+
+    track = smooth_track(path)
+
     track = create_nvecs(path)
-    # plot_track(track, True)
+    track = set_widths(track, 5)
+
+
+    plot_race_line(track, wait=True)
 
     return track
 
