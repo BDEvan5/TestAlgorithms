@@ -89,8 +89,7 @@ def plot_race_line(track, nset=None, wait=False):
 
 def set_widths(track, width=5):
     N = len(track)
-    ths = [lib.get_bearing(track[i, 0:2], track[i+1, 0:2]) for i in range(N-1)]
-
+    
     ls, rs = [width], [width]
     for i in range(N-2):
         ls.append(width)
@@ -115,8 +114,7 @@ def run_map_gen():
     track = create_nvecs(path)
     track = set_widths(track, 5)
 
-
-    plot_race_line(track, wait=True)
+    # plot_race_line(track, wait=True)
 
     return track
 
@@ -132,7 +130,6 @@ def MinCurvature():
 
     n_f_a = ca.MX.sym('n_f', N)
     n_f = ca.MX.sym('n_f', N-1)
-    th_f_a = ca.MX.sym('n_f', N)
     th_f = ca.MX.sym('n_f', N-1)
 
     x0_f = ca.MX.sym('x0_f', N-1)
@@ -160,14 +157,7 @@ def MinCurvature():
     sub_cmplx = ca.Function('a_cpx', [th1_f, th2_f], [ca.atan(im(th1_f, th2_f)/real(th1_f, th2_f))])
     get_th_n = ca.Function('gth', [th_f], [sub_cmplx(ca.pi*np.ones(N-1), sub_cmplx(th_f, th_ns[:-1]))])
     
-
-    real1 = ca.Function('real', [th1_f1, th2_f1], [ca.cos(th1_f1)*ca.cos(th2_f1) + ca.sin(th1_f1)*ca.sin(th2_f1)])
-    im1 = ca.Function('im', [th1_f1, th2_f1], [-ca.cos(th1_f1)*ca.sin(th2_f1) + ca.sin(th1_f1)*ca.cos(th2_f1)])
-
-    sub_cmplx1 = ca.Function('a_cpx', [th1_f1, th2_f1], [ca.atan(im1(th1_f1, th2_f1)/real1(th1_f1, th2_f1))])
-
     d_n = ca.Function('d_n', [n_f_a, th_f], [track_length(n_f_a)/ca.tan(get_th_n(th_f))])
-
 
     # define symbols
     n = ca.MX.sym('n', N)
@@ -176,8 +166,7 @@ def MinCurvature():
 
     nlp = {\
     'x': ca.vertcat(n, th),
-    # 'f': ca.sumsqr(sub_cmplx(th[1:], th[:-1])), 
-    'f': ca.sumsqr(sub_cmplx1(sub_cmplx1(th[2:], th[1:-1]), sub_cmplx1(th[1:-1], th[:-2]))), 
+    'f': ca.sumsqr(sub_cmplx(th[1:], th[:-1])), 
     'g': ca.vertcat(
                 # dynamic constraints
                 n[1:] - (n[:-1] + d_n(n, th[:-1])),
@@ -213,7 +202,6 @@ def MinCurvature():
 
     n_set = np.array(x_opt[:N])
     thetas = np.array(x_opt[1*N:2*N])
-
 
     plot_race_line(np.array(track), n_set, wait=True)
 
