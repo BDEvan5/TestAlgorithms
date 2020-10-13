@@ -8,10 +8,9 @@ def read_map(map_name="columbia"):
     yaml_file = read_yaml_file(map_name + '.yaml')
 
     map_file_name = yaml_file['image']
-    free_thresh = yaml_file['free_thresh']
-
     pgm_name = 'PGM map reading/maps/' + map_file_name
-    map_data = data = readpgm(pgm_name)
+    
+    map_data = readpgm(pgm_name)
 
     show_map(map_data)
 
