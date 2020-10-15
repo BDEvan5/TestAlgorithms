@@ -632,7 +632,7 @@ class AgentMPC:
 
         self.ocp = None
 
-        self.Nsim    = 50            # how much samples to simulate
+        self.Nsim    = 100            # how much samples to simulate
         self.L       = 0.3             # bicycle model length
         self.nx      = 4             # the system is composed of 3 states
         self.nu      = 2             # the system has 2 control inputs
@@ -697,14 +697,14 @@ class AgentMPC:
         X = vertcat(self.x, self.y, self.sth, self.cth)
         ocp.subject_to(ocp.at_t0(X) == self.X_0)
 
-        max_v = 5
-        ocp.subject_to( 1 <= (self.v <= max_v) )
+        max_v = 7.5
+        ocp.subject_to( 0 <= (self.v <= max_v) )
         th_dot_lim = 0.5
         ocp.subject_to( -th_dot_lim <= (self.theta_dot <= th_dot_lim) )
         #ocp.subject_to( -0.3 <= (ocp.der(V) <= 0.3) )
 
         # Minimal time
-        # ocp.add_objective(0.50*ocp.T)
+        ocp.add_objective(0.50*ocp.T)
 
         self.waypoints = ocp.parameter(2, grid='control')
         self.waypoint_last = ocp.parameter(2)
