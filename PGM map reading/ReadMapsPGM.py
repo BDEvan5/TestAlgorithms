@@ -9,12 +9,10 @@ def read_map(map_name="columbia"):
 
     map_file_name = yaml_file['image']
     pgm_name = 'PGM map reading/maps/' + map_file_name
-    
+
     map_data = readpgm(pgm_name)
 
     show_map(map_data)
-
-
 
 def show_map(map_arr):
     plt.figure(1)
@@ -33,7 +31,6 @@ def read_yaml_file(file_name, print_out=False):
 
     yaml_file = dict(yaml_file)
     return yaml_file
-
 
 def readpgm(name):
     with open(name) as f:
@@ -59,4 +56,4 @@ def readpgm(name):
 
 if __name__ == "__main__":
     read_map()
-    # testing()
+
