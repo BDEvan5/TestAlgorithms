@@ -699,7 +699,7 @@ class AgentMPC:
         #ocp.subject_to( -0.3 <= (ocp.der(V) <= 0.3) )
 
         # Minimal time
-        # ocp.add_objective(0.50*ocp.T)
+        ocp.add_objective(0.50*ocp.T)
 
         self.waypoints = ocp.parameter(2, grid='control')
         self.waypoint_last = ocp.parameter(2)
@@ -786,7 +786,7 @@ class AgentMPC:
 
             current_U, t_sol = self.run_mpc(current_X, i)
 
-        self.env.show_history()
+        # self.env.show_history()
         self.env.render_snapshot(wait=True)
 
     def run_mpc(self, current_X, i):
@@ -910,8 +910,8 @@ class AgentMPC:
             ax3.plot(T_start, self.x_hist[k,0], 'b.')
             ax3.plot(T_start, self.y_hist[k,0], 'r.')
 
-            ax4.plot(T_start, self.delta_hist[k,0], 'b.')
-            ax5.plot(T_start, self.V_hist[k,0],     'b.')
+            ax4.plot(T_start, self.xd_hist[k,0], 'b.')
+            ax5.plot(T_start, self.yd_hist[k,0],     'b.')
 
             T_start = T_start + (self.time_hist[k,1] - self.time_hist[k,0])
             plt.pause(0.05)
