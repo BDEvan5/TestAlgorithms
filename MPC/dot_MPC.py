@@ -1,5 +1,13 @@
 import numpy as np
 from matplotlib import pyplot as plt 
+import csv
+import LibFunctions as lib
+
+
+from rockit import *
+from numpy import pi, cos, sin, tan, square, arctan2
+from casadi import vertcat, horzcat, sumsqr
+
 
 
 
@@ -290,9 +298,9 @@ class TrackSim:
         self.car.prev_loc = [self.car.x, self.car.y]
         for i in range(frequency_ratio):
             # acceleration, steer_dot = self.control_system(v_ref, d_ref)
-            self.car.update_kinematic_state(x_dot, y_dot, self.timestep)
+            self.car.update_kinematic_state(x_dot_ref, y_dot_ref, self.timestep)
          
-        self.check_done_reward_track_train()
+        # self.check_done_reward_track_train()
 
         obs = self.get_state_obs()
         done = self.done
@@ -362,11 +370,11 @@ class TrackSim:
 
     def get_state_obs(self):
         car_state = self.car.get_car_state()
-        scan = self.scan_sim.get_scan(self.car.x, self.car.y, self.car.theta)
+        # scan = self.scan_sim.get_scan(self.car.x, self.car.y, self.car.theta)
 
-        state = np.concatenate([car_state, scan])
+        # state = np.concatenate([car_state, scan])
 
-        return state
+        return car_state
 
     def check_done_reward_track_train(self):
         self.reward = 0 # normal
@@ -508,14 +516,7 @@ class TrackSim:
         plt.text(100, 65, s) 
         s = f"Pos: [{self.car.x:.2f}, {self.car.y:.2f}]"
         plt.text(100, 60, s)
-        s = f"Vel: [{self.car.velocity:.2f}]"
-        plt.text(100, 55, s)
-        s = f"Theta: [{(self.car.theta * 180 / np.pi):.2f}]"
-        plt.text(100, 50, s) 
-        s = f"Delta x100: [{(self.car.steering*100):.2f}]"
-        plt.text(100, 45, s) 
-        s = f"Theta Dot: [{(self.car.th_dot):.2f}]"
-        plt.text(100, 40, s) 
+
 
         s = f"Steps: {self.steps}"
         plt.text(100, 35, s)
@@ -593,5 +594,350 @@ class TrackSim:
             plt.show()
 
 
+def find_closest_point(pose, reference_path, start_index):
+    xlist = reference_path['x'][start_index:] - pose[0]
+    ylist = reference_path['y'][start_index:] - pose[1]
+
+    close_list = np.sqrt(xlist*xlist + ylist*ylist)
+    index_closest = start_index+np.argmin(close_list)
+    print('find_closest_point results in', index_closest)
+    return index_closest
+
+def index_last_point_fun(start_index, wp, dist):
+    pathpoints = wp.shape[1]
+    cum_dist = 0
+    for i in range(start_index, pathpoints-1):
+        cum_dist += np.linalg.norm(wp[:,i] - wp[:,i+1])
+        if cum_dist >= dist:
+            return i + 1
+    return pathpoints - 1
+
+def get_current_waypoints(start_index, wp, N, dist):
+    # start_index += 1
+    last_index = index_last_point_fun(start_index, wp, dist)
+    delta_index = last_index - start_index
+    if delta_index >= N:
+        index_list = list(range(start_index, start_index+N+1))
+        print('index list with >= N points:', index_list)
+    else:
+        index_list = list(range(start_index, last_index)) + [last_index]*(N-delta_index+1)
+        print('index list with < N points:', index_list)
+
+    ret_wps = wp[:,index_list]
+
+    return ret_wps
+
+
+class AgentMPC:
+    def __init__(self):
+        self.env_map = None
+        self.env = None
+
+        self.ocp = None
+
+        self.Nsim    = 50            # how much samples to simulate
+        self.L       = 0.3             # bicycle model length
+        self.nx      = 2             # the system is composed of 3 states
+        self.nu      = 2             # the system has 2 control inputs
+        self.N       = 5            # number of control intervals
+
+        self.time_hist      = np.zeros((self.Nsim+1, self.N+1))
+        self.x_hist         = np.zeros((self.Nsim+1, self.N+1))
+        self.y_hist         = np.zeros((self.Nsim+1, self.N+1))
+        self.xd_hist     = np.zeros((self.Nsim+1, self.N+1))
+        self.yd_hist     = np.zeros((self.Nsim+1, self.N+1))
+
+        self.tracking_error = np.zeros((self.Nsim+1, 1))
+
+        self.x = None
+        self.y = None
+        self.x_dot = None
+        self.y_dot = None
+        self.X_0 = None
+        self.waypoint_last = None
+        self.waypoints = None
+
+        self.distance = None
+        self.ref_path = None
+
+        self.idx = 0
+        self.wpts = None
+        self.current_wpts = None
+
+        self.Sim_system_dyn = None
+
+    def init_agent(self, env_map):
+        self.env_map = env_map
+
+        self.init_path()
+
+        self.init_ocp()
+
+        self.env = TrackSim(self.env_map)
+        self.env.reset()
+
+    def init_ocp(self):
+        ocp = Ocp(T=FreeTime(20.0))
+
+        self.x       = ocp.state()
+        self.y       = ocp.state()
+
+        self.x_dot      = ocp.control()
+        self.y_dot      = ocp.control()
+
+        ocp.set_der(self.x,      self.x_dot)
+        ocp.set_der(self.y,      self.y_dot)
+
+        self.X_0 = ocp.parameter(self.nx)
+
+        X = vertcat(self.x, self.y)
+        ocp.subject_to(ocp.at_t0(X) == self.X_0)
+
+        max_v = 5
+        ocp.subject_to( -max_v <= (self.x_dot <= max_v) )
+        ocp.subject_to( -max_v <= (self.y_dot <= max_v) )
+        #ocp.subject_to( -0.3 <= (ocp.der(V) <= 0.3) )
+
+        # Minimal time
+        # ocp.add_objective(0.50*ocp.T)
+
+        self.waypoints = ocp.parameter(2, grid='control')
+        self.waypoint_last = ocp.parameter(2)
+        p = vertcat(self.x,self.y)
+
+        ocp.add_objective(ocp.sum(sumsqr(p-self.waypoints), grid='control'))
+        ocp.add_objective(sumsqr(ocp.at_tf(p)-self.waypoint_last))
+
+        options = {"ipopt": {"print_level": 5}}
+        options["expand"] = True
+        options["print_time"] = False
+        ocp.solver('ipopt', options)
+
+        ocp.method(MultipleShooting(N=self.N, M=1, intg='rk', grid=FreeGrid(min=0.05, max=2)))
+
+        ocp.set_initial(self.x,      0)
+        ocp.set_initial(self.y,      0)
+        ocp.set_initial(self.x_dot,  0.2)
+        ocp.set_initial(self.y_dot,  1)
+
+        self.ocp = ocp
+
+    def init_path(self):
+        wpts = self.env_map.get_min_curve_path()
+        # new_wpts = []
+        # for i in range(len(wpts)):
+        #     if i % 2 == 0:
+        #         new_wpts.append(wpts[i])
+        # wpts = np.array(new_wpts)
+
+        self.wpts = wpts
+        self.ref_path = {}
+        mul = 1
+        self.ref_path['x'] = wpts[:, 0] *mul
+        self.ref_path['y'] = wpts[:, 1] *mul
+        self.wp = horzcat(self.ref_path['x'], self.ref_path['y']).T
+
+        self.distance = 20 * mul
+
+    def first_solve(self):
+        ocp = self.ocp
+
+        index_closest_point = 0
+        current_waypoints = get_current_waypoints(index_closest_point, self.wp, 
+                                        self.N, dist=self.distance)
+        self.current_wpts = current_waypoints
+
+        ocp.set_value(self.waypoints, current_waypoints[:,:-1])
+        ocp.set_value(self.waypoint_last, current_waypoints[:,-1])
+
+        current_X = vertcat(self.ref_path['x'][0], self.ref_path['y'][0])
+        ocp.set_value(self.X_0, current_X)
+
+        sol = ocp.solve()
+
+        # Get discretised dynamics as CasADi function to simulate the system
+        self.Sim_system_dyn = ocp._method.discrete_system(ocp)
+
+        t_sol, x_sol     = sol.sample(self.x,     grid='control')
+        t_sol, y_sol     = sol.sample(self.y,     grid='control')
+        t_sol, xd_sol = sol.sample(self.x_dot, grid='control')
+        t_sol, yd_sol = sol.sample(self.y_dot, grid='control')
+
+        self.time_hist[0,:]    = t_sol
+        self.x_hist[0,:]       = x_sol
+        self.y_hist[0,:]       = y_sol
+        self.xd_hist[0,:]   = xd_sol
+        self.yd_hist[0,:]   = yd_sol
+
+        self.tracking_error[0] = sol.value(ocp.objective)
+        print('Tracking error f', self.tracking_error[0])
+
+        current_U = vertcat(xd_sol[0], yd_sol[0])
+
+        return  current_X, current_U, t_sol
+
+    def run_sim(self):
+        current_X, current_U, t_sol = self.first_solve()
+        for i in range(self.Nsim):
+            print("timestep", i+1, "of", self.Nsim)
+
+            # current_X = self.simulate(current_X, current_U, t_sol)
+            current_X = self.simulate_env(current_U, t_sol, i)
+
+            current_U, t_sol = self.run_mpc(current_X, i)
+
+        self.env.show_history()
+        self.env.render_snapshot(wait=True)
+
+    def run_mpc(self, current_X, i):
+        ocp = self.ocp
+        ocp.set_value(self.X_0, current_X)
+
+        self.idx = find_closest_point(current_X[:2], self.ref_path, self.idx)
+        current_waypoints = get_current_waypoints(self.idx, self.wp, 
+                        self.N, dist=self.distance)
+        self.current_wpts = current_waypoints
+
+        ocp.set_value(self.waypoints, current_waypoints[:,:-1])
+        ocp.set_value(self.waypoint_last, current_waypoints[:,-1])
+
+        sol = ocp.solve()
+
+        t_sol, x_sol     = sol.sample(self.x,     grid='control')
+        t_sol, y_sol     = sol.sample(self.y,     grid='control')
+        t_sol, xd_sol = sol.sample(self.x_dot, grid='control')
+        t_sol, yd_sol = sol.sample(self.y_dot, grid='control')
+
+        self.time_hist[i+1,:]    = t_sol
+        self.x_hist[i+1,:]       = x_sol
+        self.y_hist[i+1,:]       = y_sol
+        self.xd_hist[i+1,:]   = xd_sol
+        self.yd_hist[i+1,:]   = yd_sol
+
+        self.tracking_error[i+1] = sol.value(ocp.objective)
+        print('Tracking error f', self.tracking_error[i+1])
+
+        ocp.set_initial(self.x, x_sol)
+        ocp.set_initial(self.y, y_sol)
+        ocp.set_initial(self.x_dot, xd_sol)
+        ocp.set_initial(self.y_dot, yd_sol)
+
+        current_U = vertcat(xd_sol[0], yd_sol[0])
+
+        return current_U, t_sol
+
+    def simulate(self, current_X, current_U, t_sol):
+        # Simulate dynamics (applying the first control input) and update the current state
+        current_X = self.Sim_system_dyn(x0=current_X, u=current_U, T=t_sol[1]-t_sol[0])["xf"]
+
+        return current_X
+
+    def simulate_env(self, current_U, t_sol, i):
+        steps = max(int(round(t_sol[1] / 0.1) ), 1)
+        # action = np.array([current_U[1], current_U[0]])
+        action = np.array(current_U)
+        action = np.reshape(action, (2))
+        xs = self.x_hist[i, :][:, None]
+        ys = self.y_hist[i, :][:, None]
+        wpts = np.concatenate([xs, ys], axis=-1)
+
+        plt.figure(2)
+        plt.clf()
+        plt.title("X dot ")
+        plt.plot(self.xd_hist[i, :])
+        plt.figure(3)
+        plt.clf()
+        plt.title("Y dot ")
+        plt.plot(self.yd_hist[i, :])
+        plt.pause(0.001)
+
+        p_pts = np.array(self.current_wpts).T
+        self.env.render_mpc(wpts=p_pts, sol=wpts, wait=False)
+        print(f"Steps: {steps}")
+        for _ in range(steps):
+            obs, r, done, _ = self.env.step(action)
+
+        # self.env.render_mpc(wpts=p_pts, sol=wpts, wait=False)
+
+        current_X = np.concatenate([obs[0:2]])
+
+        return current_X
+
+    def plot_results(self):
+        T_start = 0
+        T_end = sum(self.time_hist[k,1] - self.time_hist[k,0] for k in range(self.Nsim+1))
+
+        fig = plt.figure()
+
+        ax2 = plt.subplot(2, 2, 1)
+        ax3 = plt.subplot(2, 2, 2)
+        ax4 = plt.subplot(2, 2, 3)
+        ax5 = plt.subplot(2, 2, 4)
+
+        ax2.plot(self.wp[0,:], self.wp[1,:], 'ko')
+        ax2.set_xlabel('x pos [m]')
+        ax2.set_ylabel('y pos [m]')
+        ax2.set_aspect('equal', 'box')
+
+        ax3.set_xlabel('T [s]')
+        ax3.set_ylabel('pos [m]')
+        ax3.set_xlim(0,T_end)
+
+        ax4.axhline(y= pi/6, color='r')
+        ax4.axhline(y=-pi/6, color='r')
+        ax4.set_xlabel('T [s]')
+        ax4.set_ylabel('delta [rad/s]')
+        ax4.set_xlim(0,T_end)
+
+        ax5.axhline(y=0, color='r')
+        ax5.axhline(y=1, color='r')
+        ax5.set_xlabel('T [s]')
+        ax5.set_ylabel('V [m/s]')
+        ax5.set_xlim(0,T_end)
+
+        # fig2 = plt.figure()
+        # ax6 = plt.subplot(1,1,1)
+
+        for k in range(self.Nsim+1):
+            # ax6.plot(time_hist[k,:], delta_hist[k,:])
+            # ax6.axhline(y= pi/6, color='r')
+            # ax6.axhline(y=-pi/6, color='r')
+
+            ax2.plot(self.x_hist[k,:], self.y_hist[k,:], 'b-')
+            ax2.plot(self.x_hist[k,:], self.y_hist[k,:], 'g.')
+            ax2.plot(self.x_hist[k,0], self.y_hist[k,0], 'ro', markersize = 10)
+
+            ax3.plot(T_start, self.x_hist[k,0], 'b.')
+            ax3.plot(T_start, self.y_hist[k,0], 'r.')
+
+            ax4.plot(T_start, self.delta_hist[k,0], 'b.')
+            ax5.plot(T_start, self.V_hist[k,0],     'b.')
+
+            T_start = T_start + (self.time_hist[k,1] - self.time_hist[k,0])
+            plt.pause(0.05)
+
+        ax3.legend(['x pos [m]','y pos [m]'])
+
+        fig3 = plt.figure()
+        ax1 = plt.subplot(1,1,1)
+        ax1.semilogy(self.tracking_error)
+        ax1.set_xlabel('N [-]')
+        ax1.set_ylabel('obj f')
+
+        plt.show(block=True)
+
+def main():
+    env_map = TrackMap()
+    myMpc = AgentMPC()
+    myMpc.init_agent(env_map)
+
+    myMpc.run_sim()
+    myMpc.plot_results()
+
+
+
+
+if __name__ == "__main__":
+    main()
 
 
