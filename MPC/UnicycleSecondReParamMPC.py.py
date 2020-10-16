@@ -699,7 +699,7 @@ class AgentMPC:
 
         max_v = 7.5
         ocp.subject_to( 0 <= (self.v <= max_v) )
-        th_dot_lim = 0.5
+        th_dot_lim = 0.6
         ocp.subject_to( -th_dot_lim <= (self.theta_dot <= th_dot_lim) )
         #ocp.subject_to( -0.3 <= (ocp.der(V) <= 0.3) )
 
@@ -858,12 +858,12 @@ class AgentMPC:
 
         plt.figure(2)
         plt.clf()
-        plt.ylim([0, 6])
+        plt.ylim([0, 8])
         plt.title("Velocity ")
         plt.plot(self.v_hist[i, :])
         plt.figure(3)
         plt.clf()
-        th_lim = 0.5
+        th_lim = 1.5
         plt.ylim([-th_lim, th_lim])
         plt.title("Theta dot ")
         plt.plot(self.thd_hist[i, :])
