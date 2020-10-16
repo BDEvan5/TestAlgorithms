@@ -636,7 +636,7 @@ class AgentMPC:
         self.L       = 0.3             # bicycle model length
         self.nx      = 2             # the system is composed of 3 states
         self.nu      = 2             # the system has 2 control inputs
-        self.N       = 5            # number of control intervals
+        self.N       = 50            # number of control intervals
 
         self.time_hist      = np.zeros((self.Nsim+1, self.N+1))
         self.x_hist         = np.zeros((self.Nsim+1, self.N+1))
@@ -748,7 +748,8 @@ class AgentMPC:
         ocp.set_value(self.waypoints, current_waypoints[:,:-1])
         ocp.set_value(self.waypoint_last, current_waypoints[:,-1])
 
-        current_X = vertcat(self.ref_path['x'][0], self.ref_path['y'][0])
+        starting_ind = 0
+        current_X = vertcat(self.ref_path['x'][starting_ind], self.ref_path['y'][starting_ind])
         ocp.set_value(self.X_0, current_X)
 
         sol = ocp.solve()
