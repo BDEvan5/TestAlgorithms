@@ -182,8 +182,8 @@ current_waypoints = get_current_waypoints(index_closest_point, wp, N, dist=dista
 # Set initial value for waypoint parameters
 a = current_waypoints[:,:-1]
 b = current_waypoints[:,-1]
-ocp.set_value(waypoints,current_waypoints[:,:-1])
-ocp.set_value(waypoint_last,current_waypoints[:,-1])
+ocp.set_value(waypoints, current_waypoints[:,:-1])
+ocp.set_value(waypoint_last, current_waypoints[:,-1])
 
 # Set initial value for states
 current_X = vertcat(ref_path['x'][0], ref_path['y'][0], 0)
