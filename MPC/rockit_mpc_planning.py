@@ -6,7 +6,7 @@ import numpy as np
 from numpy import pi, cos, sin, tan, square
 from casadi import vertcat, horzcat, sumsqr
 
-
+from TrackMap import TrackMap
 
 # -------------------------------
 # Define some functions to match current position with reference path
@@ -61,7 +61,7 @@ def get_current_waypoints(start_index, wp, N, dist):
 # Problem parameters
 # -------------------------------
 
-Nsim    = 30            # how much samples to simulate
+Nsim    = 10            # how much samples to simulate
 L       = 0.33             # bicycle model length
 nx      = 3             # the system is composed of 3 states
 nu      = 2             # the system has 2 control inputs
@@ -84,7 +84,7 @@ tracking_error = np.zeros((Nsim+1, 1))
 # Set OCP
 # -------------------------------
 
-ocp = Ocp(T=FreeTime(10.0))
+ocp = Ocp(T=FreeTime(20.0))
 
 # Bicycle model
 
@@ -145,12 +145,25 @@ ocp.solver('ipopt', options)
 # Make it concrete for this ocp
 ocp.method(MultipleShooting(N=N, M=1, intg='rk', grid=FreeGrid(min=0.05, max=2)))
 
-# Define reference path
-pathpoints = 30
+env_map = TrackMap()
+wpts = env_map.get_min_curve_path()
+
+wpts = wpts
 ref_path = {}
-ref_path['x'] = 5*sin(np.linspace(0,2*pi, pathpoints+1))
-ref_path['y'] = np.linspace(1,2, pathpoints+1)**2*10
+mul = 1
+ref_path['x'] = wpts[:, 0] *mul
+ref_path['y'] = wpts[:, 1] *mul
 wp = horzcat(ref_path['x'], ref_path['y']).T
+
+distance = 20
+
+
+# Define reference path
+# pathpoints = 30
+# ref_path = {}
+# ref_path['x'] = 5*sin(np.linspace(0,2*pi, pathpoints+1))
+# ref_path['y'] = np.linspace(1,2, pathpoints+1)**2*10
+# wp = horzcat(ref_path['x'], ref_path['y']).T
 
 # theta_path = [arctan2(ref_path['y'][k+1]-ref_path['y'][k], ref_path['x'][k+1]-ref_path['x'][k]) for k in range(pathpoints)]
 # ref_path['theta'] = theta_path + [theta_path[-1]]
@@ -164,7 +177,7 @@ wp = horzcat(ref_path['x'], ref_path['y']).T
 index_closest_point = 0
 
 # Create a list of N waypoints
-current_waypoints = get_current_waypoints(index_closest_point, wp, N, dist=6)
+current_waypoints = get_current_waypoints(index_closest_point, wp, N, dist=distance)
 
 # Set initial value for waypoint parameters
 a = current_waypoints[:,:-1]
@@ -221,7 +234,7 @@ for i in range(Nsim):
     index_closest_point = find_closest_point(current_X[:2], ref_path, index_closest_point)
 
     # Create a list of N waypoints
-    current_waypoints = get_current_waypoints(index_closest_point, wp, N, dist=6)
+    current_waypoints = get_current_waypoints(index_closest_point, wp, N, dist=distance)
 
     # Set initial value for waypoint parameters
     ocp.set_value(waypoints, current_waypoints[:,:-1])
@@ -307,7 +320,7 @@ for k in range(Nsim+1):
     ax5.plot(T_start, V_hist[k,0],     'b.')
 
     T_start = T_start + (time_hist[k,1] - time_hist[k,0])
-    plt.pause(0.5)
+    plt.pause(0.05)
 
 ax3.legend(['x pos [m]','y pos [m]'])
 

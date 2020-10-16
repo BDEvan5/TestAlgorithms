@@ -710,7 +710,10 @@ class AgentMPC:
         options["print_time"] = False
         ocp.solver('ipopt', options)
 
-        ocp.method(MultipleShooting(N=self.N, M=1, intg='rk', grid=FreeGrid(min=0.05, max=2)))
+        # method = MultipleShooting(N=self.N, M=1, intg='rk', grid=FreeGrid(min=0.05, max=2))
+        method = DirectCollocation(N=self.N, M=1, intg='rk', grid=FreeGrid(min=0.05, max=2))
+
+        ocp.method(method)
 
         ocp.set_initial(self.x,      0)
         ocp.set_initial(self.y,      0)
@@ -721,11 +724,6 @@ class AgentMPC:
 
     def init_path(self):
         wpts = self.env_map.get_min_curve_path()
-        # new_wpts = []
-        # for i in range(len(wpts)):
-        #     if i % 2 == 0:
-        #         new_wpts.append(wpts[i])
-        # wpts = np.array(new_wpts)
 
         self.wpts = wpts
         self.ref_path = {}
@@ -768,6 +766,8 @@ class AgentMPC:
 
         self.tracking_error[0] = sol.value(ocp.objective)
         print('Tracking error f', self.tracking_error[0])
+
+        self.ocp.spy()
 
         current_U = vertcat(v_sol[0], theta_sol[0])
 
