@@ -206,16 +206,16 @@ class CarModel:
         self.max_v = 7.5
         self.max_friction_force = self.mass * self.mu * 9.81
 
-    def update_kinematic_state(self, v, theta_dot, dt):
-        self.x = self.x + v * np.sin(self.theta) * dt
-        self.y = self.y + v * np.cos(self.theta) * dt
-        self.theta = self.theta + theta_dot * dt
+    def update_kinematic_state(self, v, theta, dt):
+        self.x = self.x + v * np.sin(theta) * dt
+        self.y = self.y + v * np.cos(theta) * dt
+        self.theta = theta
 
     def get_car_state(self):
         state = []
         state.append(self.x)
         state.append(self.y)
-        state.append(self.theta)
+        # state.append(self.theta)
 
         return state
 
@@ -634,16 +634,15 @@ class AgentMPC:
 
         self.Nsim    = 50            # how much samples to simulate
         self.L       = 0.3             # bicycle model length
-        self.nx      = 3             # the system is composed of 3 states
+        self.nx      = 2             # the system is composed of 3 states
         self.nu      = 2             # the system has 2 control inputs
         self.N       = 5            # number of control intervals
 
         self.time_hist      = np.zeros((self.Nsim+1, self.N+1))
         self.x_hist         = np.zeros((self.Nsim+1, self.N+1))
         self.y_hist         = np.zeros((self.Nsim+1, self.N+1))
-        self.theta_hist     = np.zeros((self.Nsim+1, self.N+1))
         self.v_hist     = np.zeros((self.Nsim+1, self.N+1))
-        self.thd_hist     = np.zeros((self.Nsim+1, self.N+1))
+        self.theta_hist     = np.zeros((self.Nsim+1, self.N+1))
 
         self.tracking_error = np.zeros((self.Nsim+1, 1))
 
@@ -651,7 +650,6 @@ class AgentMPC:
         self.y = None
         self.theta = None
         self.v = None
-        self.theta_dot = None
         self.X_0 = None
         self.waypoint_last = None
         self.waypoints = None
@@ -680,28 +678,26 @@ class AgentMPC:
 
         self.x       = ocp.state()
         self.y       = ocp.state()
-        self.theta   = ocp.state()
 
         self.v = ocp.control()
-        self.theta_dot = ocp.control()
+        self.theta   = ocp.control()
 
         ocp.set_der(self.x,      sin(self.theta) * self.v)
         ocp.set_der(self.y,      cos(self.theta) * self.v)
-        ocp.set_der(self.theta,      self.theta_dot)
 
         self.X_0 = ocp.parameter(self.nx)
 
-        X = vertcat(self.x, self.y, self.theta)
+        X = vertcat(self.x, self.y)
         ocp.subject_to(ocp.at_t0(X) == self.X_0)
 
-        max_v = 5
-        ocp.subject_to( 1 <= (self.v <= max_v) )
-        th_dot_lim = 0.5
-        ocp.subject_to( -th_dot_lim <= (self.theta_dot <= th_dot_lim) )
+        max_v = 7.5
+        ocp.subject_to( 0 <= (self.v <= max_v) )
+        th_lim = np.pi
+        ocp.subject_to( -th_lim <= (self.theta <= th_lim) )
         #ocp.subject_to( -0.3 <= (ocp.der(V) <= 0.3) )
 
         # Minimal time
-        # ocp.add_objective(0.50*ocp.T)
+        ocp.add_objective(0.50*ocp.T)
 
         self.waypoints = ocp.parameter(2, grid='control')
         self.waypoint_last = ocp.parameter(2)
@@ -720,7 +716,6 @@ class AgentMPC:
         ocp.set_initial(self.x,      0)
         ocp.set_initial(self.y,      0)
         ocp.set_initial(self.theta,  0)
-        ocp.set_initial(self.theta_dot,  0)
         ocp.set_initial(self.v, 2)
 
         self.ocp = ocp
@@ -753,7 +748,7 @@ class AgentMPC:
         ocp.set_value(self.waypoints, current_waypoints[:,:-1])
         ocp.set_value(self.waypoint_last, current_waypoints[:,-1])
 
-        current_X = vertcat(self.ref_path['x'][0], self.ref_path['y'][0], 0)
+        current_X = vertcat(self.ref_path['x'][0], self.ref_path['y'][0])
         ocp.set_value(self.X_0, current_X)
 
         sol = ocp.solve()
@@ -763,21 +758,19 @@ class AgentMPC:
 
         t_sol, x_sol     = sol.sample(self.x,     grid='control')
         t_sol, y_sol     = sol.sample(self.y,     grid='control')
-        t_sol, th_sol = sol.sample(self.theta, grid='control')
         t_sol, v_sol = sol.sample(self.v, grid='control')
-        t_sol, thd_sol = sol.sample(self.theta_dot, grid='control')
+        t_sol, th_sol = sol.sample(self.theta, grid='control')
 
         self.time_hist[0,:]    = t_sol
         self.x_hist[0,:]       = x_sol
         self.y_hist[0,:]       = y_sol
         self.v_hist[0,:]   = v_sol
-        self.thd_hist[0,:]   = thd_sol
         self.theta_hist[0,:]   = th_sol
 
         self.tracking_error[0] = sol.value(ocp.objective)
         print('Tracking error f', self.tracking_error[0])
 
-        current_U = vertcat(v_sol[0], thd_sol[0])
+        current_U = vertcat(v_sol[0], th_sol[0])
 
         return  current_X, current_U, t_sol
 
@@ -810,15 +803,13 @@ class AgentMPC:
 
         t_sol, x_sol     = sol.sample(self.x,     grid='control')
         t_sol, y_sol     = sol.sample(self.y,     grid='control')
-        t_sol, th_sol = sol.sample(self.theta, grid='control')
         t_sol, v_sol = sol.sample(self.v, grid='control')
-        t_sol, thd_sol = sol.sample(self.theta_dot, grid='control')
+        t_sol, th_sol = sol.sample(self.theta, grid='control')
 
         self.time_hist[i+1,:]    = t_sol
         self.x_hist[i+1,:]       = x_sol
         self.y_hist[i+1,:]       = y_sol
         self.v_hist[i+1,:]   = v_sol
-        self.thd_hist[i+1,:]   = thd_sol
         self.theta_hist[i+1,:]   = th_sol
 
         self.tracking_error[i+1] = sol.value(ocp.objective)
@@ -828,9 +819,8 @@ class AgentMPC:
         ocp.set_initial(self.y, y_sol)
         ocp.set_initial(self.theta, th_sol)
         ocp.set_initial(self.v, v_sol)
-        ocp.set_initial(self.theta_dot, thd_sol)
 
-        current_U = vertcat(v_sol[0], thd_sol[0])
+        current_U = vertcat(v_sol[0], th_sol[0])
 
         return current_U, t_sol
 
@@ -851,14 +841,15 @@ class AgentMPC:
 
         plt.figure(2)
         plt.clf()
-        plt.ylim([0, 6])
+        plt.ylim([0, 8])
         plt.title("Velocity ")
         plt.plot(self.v_hist[i, :])
         plt.figure(3)
         plt.clf()
-        plt.ylim([-3.2, 3.2])
+        th_lim = 4
+        plt.ylim([-th_lim, th_lim])
         plt.title("Theta dot ")
-        plt.plot(self.thd_hist[i, :])
+        plt.plot(self.theta_hist[i, :])
         plt.pause(0.001)
 
         p_pts = np.array(self.current_wpts).T
@@ -869,7 +860,7 @@ class AgentMPC:
 
         # self.env.render_mpc(wpts=p_pts, sol=wpts, wait=False)
 
-        current_X = np.concatenate([obs[0:3]])
+        current_X = np.concatenate([obs[0:2]])
 
         return current_X
 
@@ -921,7 +912,7 @@ class AgentMPC:
             ax3.plot(T_start, self.y_hist[k,0], 'r.')
 
             ax4.plot(T_start, self.v_hist[k,0], 'b.')
-            ax5.plot(T_start, self.thd_hist[k,0],     'b.')
+            ax5.plot(T_start, self.theta_hist[k,0],     'b.')
 
             T_start = T_start + (self.time_hist[k,1] - self.time_hist[k,0])
             plt.pause(0.05)
