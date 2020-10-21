@@ -78,11 +78,11 @@ def MinCurvatureTrajectory(track, obs_map=None):
     'g': ca.vertcat(
                 # dynamic constraints
                 n[1:] - (n[:-1] + d_n(n, th)),
-                lut(ca.horzcat(o_x_s(n[:-1]), o_y_s(n[:-1])).T).T,
+                # lut(ca.horzcat(o_x_s(n[:-1]), o_y_s(n[:-1])).T).T,
 
                 # boundary constraints
-                # n[0], #th[0],
-                # n[-1], #th[-1],
+                n[0], #th[0],
+                n[-1], #th[-1],
             ) \
     
     }
