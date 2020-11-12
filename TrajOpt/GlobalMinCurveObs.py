@@ -3,6 +3,7 @@ import numpy as np
 import casadi as ca 
 from matplotlib import pyplot as plt 
 import yaml, csv
+from scipy import ndimage
 
 import LibFunctions as lib 
 
@@ -125,6 +126,7 @@ class MapBase:
 
         self.scan_map = None
         self.obs_map = None
+        self.c_map = None
 
         self.track = None
         self.track_pts = None
@@ -219,6 +221,15 @@ class MapBase:
         else:
             plt.imshow(self.obs_map + self.scan_map)
 
+        for i in range(len(l_line)):
+            x1, y1 = self.convert_position(l_line[i])
+            x2, y2 = self.convert_position(r_line[i])
+            x = [x1, x2]
+            y = [y1, y2]
+            plt.plot(x, y, linewidth=3)
+
+
+
         plt.gca().set_aspect('equal', 'datalim')
 
         plt.pause(0.0001)
@@ -286,7 +297,7 @@ class MapBase:
         stp_sze = 0.1
         sf = 0.9 # safety factor
         nws, pws = [], []
-        for i in range(self.N):
+        for i in range(len(tx)):
             pt = [tx[i], ty[i]]
             nvec = nvecs[i]
 
@@ -311,6 +322,111 @@ class MapBase:
 
         self.track = new_track
 
+    def find_centreline(self, show=False):
+        self.dt = ndimage.distance_transform_edt(self.c_map)
+        dt = np.array(self.dt) 
+
+        d_search = 0.8 
+        n_search = 11
+        dth = (np.pi * 1/2) / (n_search-1)
+
+        # makes a list of search locations
+        search_list = []
+        for i in range(n_search):
+            th = -np.pi/2 + dth * i
+            x = -np.sin(th) * d_search
+            y = np.cos(th) * d_search
+            loc = [x, y]
+            search_list.append(loc)
+
+        pt = self.start
+        self.cline = [pt]
+        th = np.pi/2 # start theta
+        # while (lib.get_distance(pt, self.start) > d_search or 10 > len(self.cline))  and len(self.cline) < 200 :
+        while (lib.get_distance(pt, self.start) > d_search or len(self.cline) < 10)  :
+            vals = []
+            self.search_space = []
+            for i in range(n_search):
+                d_loc = lib.transform_coords(search_list[i], -th)
+                search_loc = lib.add_locations(pt, d_loc)
+
+                self.search_space.append(search_loc)
+
+                x, y = self.convert_int_position(search_loc)
+                val = dt[y, x]
+                vals.append(val)
+
+            ind = np.argmax(vals)
+            d_loc = lib.transform_coords(search_list[ind], -th)
+            pt = lib.add_locations(pt, d_loc)
+            self.cline.append(pt)
+
+            if show:
+                self.plot_raceline_finding()
+
+            th = lib.get_bearing(self.cline[-2], pt)
+            print(f"Adding pt: {pt}")
+
+        self.cline = np.array(self.cline)
+        self.N = len(self.cline)
+        print(f"Raceline found")
+        self.plot_raceline_finding()
+
+        self.track = self.cline
+
+    def plot_raceline_finding(self, wait=False):
+        plt.figure(1)
+        plt.clf()
+        plt.imshow(self.dt)
+
+
+        for pt in self.cline:
+            s_x, s_y = self.convert_position(pt)
+            plt.plot(s_x, s_y, '+', markersize=16)
+
+        for pt in self.search_space:
+            s_x, s_y = self.convert_position(pt)
+            plt.plot(s_x, s_y, 'x', markersize=12)
+
+
+        plt.pause(0.001)
+
+        if wait:
+            plt.show()
+
+    def find_nvecs(self):
+        N = self.N
+        track = self.cline
+
+        nvecs = []
+        # new_track.append(track[0, :])
+        nvec = lib.theta_to_xy(np.pi/2 + lib.get_bearing(track[0, :], track[1, :]))
+        nvecs.append(nvec)
+        for i in range(1, len(track)-1):
+            pt1 = track[i-1]
+            pt2 = track[min((i, N)), :]
+            pt3 = track[min((i+1, N-1)), :]
+
+            th1 = lib.get_bearing(pt1, pt2)
+            th2 = lib.get_bearing(pt2, pt3)
+            if th1 == th2:
+                th = th1
+            else:
+                dth = lib.sub_angles_complex(th1, th2) / 2
+                th = lib.add_angles_complex(th2, dth)
+
+            new_th = th + np.pi/2
+            nvec = lib.theta_to_xy(new_th)
+            nvecs.append(nvec)
+
+        nvec = lib.theta_to_xy(np.pi/2 + lib.get_bearing(track[-2, :], track[-1, :]))
+        nvecs.append(nvec)
+
+        self.track = np.concatenate([track, nvecs], axis=-1)
+
+
+    def invert_map(self):
+        self.c_map = np.ones_like(self.scan_map) - (self.scan_map + self.obs_map)
 
     def get_min_curve(self):
         track = self.track
@@ -322,8 +438,12 @@ class MapBase:
 
 def main():
     mymap = MapBase(name)
+    # mymap.random_obs(10)
+    mymap.invert_map()
+    mymap.find_centreline()
+    mymap.find_nvecs()
     mymap.set_true_widths()
-    mymap.random_obs(10)
+    mymap.render_map(wait=True)
     mymap.get_min_curve()
     mymap.render_map(wait=True)
 
