@@ -15,9 +15,8 @@ class Ocp:
         self.objectives = {}
 
         self.dt = ca.MX.sym('dt', self.n-1)
-        # self.states.append(dt)
 
-    def create_state(self, name="x"):
+    def state(self, name="x"):
         state = ca.MX.sym(name, self.n)
         self.states.append(state)
 
@@ -28,6 +27,9 @@ class Ocp:
         self.controls.append(control)
 
         return control
+
+    def get_time(self):
+        return self.dt
 
     def set_der(self, state, der):
         self.state_der[state] = der
@@ -75,11 +77,14 @@ class Ocp:
         r = S(x0=x0, lbx=lbx, ubx=ubx, lbg=lbg, ubg=ubg)
         x_opt = r['x']
 
-        return x_opt
+        n_state_vars = len(self.states) * self.n
+        n_control_vars = len(self.controls) * self.n
 
-    
+        states = np.array(x_opt[:n_state_vars])
+        controls = np.array(x_opt[n_state_vars:n_state_vars + n_control_vars])
+        times = np.array(x_opt[-self.n+1:])
 
-
+        return states, controls, times
 
 
 def example():
@@ -96,8 +101,9 @@ def example():
 
     ocp = Ocp(N)
 
-    x = ocp.create_state('x')
+    x = ocp.state('x')
     x_dot = ocp.control('x_dot')
+    dt = ocp.get_time()
 
     ocp.set_der(x, x_dot)
     ocp.set_objective(x, wpts[0, :])
@@ -112,20 +118,17 @@ def example():
     ocp.set_inital(x_dot, xd00)
     ocp.set_inital(ocp.dt, dt00)
 
-    x_opt = ocp.solve()
+    states, controls, times = ocp.solve()
 
-    x = np.array(x_opt[:N])
-    xds = np.array(x_opt[N:N + N1])
-    times = np.array(x_opt[N + N1:])
+    x = states
+    x_dots = controls
     total_time = np.sum(times)
 
     print(f"Times: {times}")
     print(f"Total Time: {total_time}")
-    print(f"X dots: {xds.T}")
     print(f"xs: {x.T}")
+    print(f"X dots: {x_dots.T}")
 
-    print(f"----------------")
-    print(f"{xds * times}")
 
     plt.figure(1)
     plt.plot(wpts[0, :], np.ones_like(wpts[0, :]), 'o', markersize=12)
