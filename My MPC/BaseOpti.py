@@ -132,15 +132,13 @@ def BaseOpti():
 
     nlp = {\
         'x': ca.vertcat(x, y, x_dot, y_dot, dt),
-        'f': ca.sumsqr(x - wpts[0, :]) + ca.sumsqr(y - wpts[1, :]) + ca.sumsqr(dt),
+        'f': ca.sumsqr(x - wpts[0, :]) + ca.sumsqr(y - wpts[1, :]) + ca.sumsqr(dt) * 0.01,
         'g': ca.vertcat(\
             x[1:] - (x[:-1] + x_dot * dt),
             y[1:] - (y[:-1] + y_dot * dt),
 
             x[0] - wpts[0, 0], 
-            y[0] - wpts[1, :],
-            x_dot[0], 
-            y_dot[0]
+            y[0] - wpts[1, 0],
             ),
         }
         
@@ -161,15 +159,18 @@ def BaseOpti():
     lbx = [0] * 2 * N + [-max_speed] * 2 * N1 + [0] * N1
     ubx = [ca.inf] * 2 * N + [max_speed] * 2 * N1 + [10] * N1
 
+    lbg = [0] * N *2 
+    ubg = [0] * N *2 
+
     # solve
-    r = S(x0=x0, lbx=lbx, ubx=ubx)
+    r = S(x0=x0, lbx=lbx, ubx=ubx, lbg=lbg, ubg=ubg)
     x_opt = r['x']
 
     x = np.array(x_opt[:N])
     y = np.array(x_opt[N:2*N])
-    times = np.array(x_opt[N*2 + N1*2:])
     xds = np.array(x_opt[2*N:2*N + N1])
     yds = np.array(x_opt[2*N + N1: 2*N + 2*N1])
+    times = np.array(x_opt[N*2 + N1*2:])
     total_time = np.sum(times)
 
     print(f"Times: {times}")
@@ -179,13 +180,143 @@ def BaseOpti():
     print(f"xs: {x.T}")
     print(f"ys: {y.T}")
 
-    plt.figure(1)
-    plt.plot(wpts[0, :], wpts[1, :], 'x')
+    print(f"----------------")
+    print(f"{xds * times}")
 
-    plt.plot(x, y, '+', markersize=2)
+    plt.figure(1)
+    plt.plot(wpts[0, :], wpts[1, :], 'o', markersize=12)
+
+    plt.plot(x, y, '+', markersize=20)
+
+    plt.show()
+    
+def BaseOptiX():
+    pathpoints = 30
+    ref_path = {}
+    ref_path['x'] = 5*np.sin(np.linspace(0,2*np.pi, pathpoints+1))
+    ref_path['y'] = np.linspace(1,2, pathpoints+1)**2*10
+    wp = ca.horzcat(ref_path['x'], ref_path['y']).T
+
+    N = 5
+    N1 = N-1
+
+    wpts = np.array(wp[:, 0:N])
+
+    x = ca.MX.sym('x', N)
+    x_dot = ca.MX.sym('xd', N-1)
+    dt = ca.MX.sym('dt', N-1)
+
+    nlp = {\
+        'x': ca.vertcat(x, x_dot, dt),
+        'f': ca.sumsqr(x - wpts[0, :]) *100 + ca.sum1(dt),
+        'g': ca.vertcat(\
+            x[1:] - (x[:-1] + x_dot * dt),
+
+            x[0] - wpts[0, 0], 
+            ),
+        }
+        
+    S = ca.nlpsol('S', 'ipopt', nlp)
+
+    # x0
+    x00 = wpts[0, :]
+    T = 5
+    dt00 = [T/N1] * N1
+    xd00 = (x00[1:] - x00[:-1]) / dt00
+
+    x0 = ca.vertcat(x00, xd00, dt00)
+
+    max_speed = 1
+
+    lbx = [0]  * N + [-max_speed]  * N1 + [0] * N1
+    ubx = [ca.inf]  * N + [max_speed]  * N1 + [10] * N1
+
+    lbg = [0] * N 
+    ubg = [0] * N 
+
+    # solve
+    r = S(x0=x0, lbx=lbx, ubx=ubx, lbg=lbg, ubg=ubg)
+    x_opt = r['x']
+
+    x = np.array(x_opt[:N])
+    xds = np.array(x_opt[N:N + N1])
+    times = np.array(x_opt[N + N1:])
+    total_time = np.sum(times)
+
+    print(f"Times: {times}")
+    print(f"Total Time: {total_time}")
+    print(f"X dots: {xds.T}")
+    print(f"xs: {x.T}")
+
+    print(f"----------------")
+    print(f"{xds * times}")
+
+    plt.figure(1)
+    plt.plot(wpts[0, :], np.ones_like(wpts[0, :]), 'o', markersize=12)
+
+    plt.plot(x, np.ones_like(x), '+', markersize=20)
+
+    plt.show()
+    
+
+def BaseOptiDX():
+    pathpoints = 30
+    ref_path = {}
+    ref_path['x'] = 5*np.sin(np.linspace(0,2*np.pi, pathpoints+1))
+    ref_path['y'] = np.linspace(1,2, pathpoints+1)**2*10
+    wp = ca.horzcat(ref_path['x'], ref_path['y']).T
+
+    N = 5
+    N1 = N-1
+
+    wpts = np.array(wp[:, 0:N])
+
+    x = ca.MX.sym('x', N)
+    dx = ca.MX.sym('dx', N-1)
+
+    nlp = {\
+        'x': ca.vertcat(x, dx),
+        'f': ca.sumsqr(x - wpts[0, :]) + ca.sumsqr(dx),
+        'g': ca.vertcat(\
+            x[1:] - (x[:-1] + dx),
+
+            x[0] - wpts[0, 0], 
+            )\
+        }
+        
+    S = ca.nlpsol('S', 'ipopt', nlp)
+
+    # x0
+    x00 = wpts[0, :]
+    dx00 = (x00[1:] - x00[:-1]) 
+
+    x0 = ca.vertcat(x00, dx00)
+
+    lbx = [0]  * N + [0] * N1
+    ubx = [ca.inf]  * N  + [10] * N1
+
+    lbg = [0] * N 
+    ubg = [0] * N 
+
+    # solve
+    r = S(x0=x0, lbx=lbx, ubx=ubx, lbg=lbg, ubg=ubg)
+    x_opt = r['x']
+
+    x = np.array(x_opt[:N])
+    xds = np.array(x_opt[N:N + N1])
+
+    print(f"xs: {x.T}")
+    print(f"dx's: {xds.T}")
+
+    plt.figure(1)
+    plt.plot(wpts[0, :], np.ones_like(wpts[0, :]), 'o', markersize=12)
+
+    plt.plot(x, np.ones_like(x), '+', markersize=20)
 
     plt.show()
 
 
 if __name__ == "__main__":
     BaseOpti()
+    # BaseOptiDX()
+    # BaseOptiX()
