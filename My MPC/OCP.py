@@ -4,8 +4,11 @@ from matplotlib import pyplot as plt
 
 
 class Ocp:
-    def __init__(self, n_pts):
+    def __init__(self, n_pts, max_t=20):
         self.n = n_pts
+        self.max_t = max_t
+        self.dt = ca.MX.sym('dt', self.n-1)
+
         self.states = []
         self.controls = []
 
@@ -13,8 +16,11 @@ class Ocp:
         self.initial = {}
         self.constraints = {}
         self.objectives = {}
+        self.o_scales = {}
 
-        self.dt = ca.MX.sym('dt', self.n-1)
+        self.min_lims = {}
+        self.max_lims = {}
+
 
     def state(self, name="x"):
         state = ca.MX.sym(name, self.n)
@@ -37,41 +43,47 @@ class Ocp:
     def set_inital(self, state, init_val):
         self.initial[state] = init_val
 
-    def set_objective(self, var, objective):
-        self.objectives[var] = objective
+    def set_objective(self, var, objective, scale=1):
+        self.objectives[var] = objective 
+        self.o_scales[var] = scale
 
     def set_constraints(self, state, constraint):
         self.constraints[state] = constraint
 
+    def set_lims(self, state, state_min, state_max):
+        self.min_lims[state] = state_min
+        self.max_lims[state] = state_max
+
     def solve(self):
-        N = self.n
-        N1 = N - 1
+        xs = ca.vcat([state for state in self.states])
+        us = ca.vcat([control for control in self.controls])
 
-        xs = [state for state in self.states]
-        us = [control for control in self.controls]
+        dyns = ca.vcat([var[1:] - (var[:-1] + self.state_der[var] * self.dt) for var in self.states])
+        cons = ca.vcat([cons[0] - self.constraints[cons] for cons in self.constraints.keys()])
 
-        dyns = [var[1:] - (var[:-1] + self.state_der[var] * self.dt) for var in self.states]
-        cons = [cons[0] - self.constraints[cons] for cons in self.constraints.keys()]
-
-        obs = [o - self.objectives[o] for o in self.objectives.keys()]
+        obs = ca.vcat([(o - self.objectives[o]) * self.o_scales[o] for o in self.objectives.keys()])
 
         nlp = {\
-            'x': ca.vertcat(xs[0], us[0], self.dt),
-            'f': ca.sumsqr(obs[0]),
-            'g': ca.vertcat(dyns[0], cons[0])
+            'x': ca.vertcat(xs, us, self.dt),
+            'f': ca.sumsqr(obs),
+            'g': ca.vertcat(dyns, cons)
             }
 
-        max_speed = 1
+        n_g = nlp['g'].shape[0]
+        lbg = [0] * n_g
+        ubg = [0] * n_g
 
-        lbx = [0]  * N + [-max_speed]  * N1 + [0] * N1
-        ubx = [ca.inf]  * N + [max_speed]  * N1 + [10] * N1
+        x00 = ca.vcat([self.initial[state] for state in self.states])
+        u00 = ca.vcat([self.initial[control] for control in self.controls])
+        x0 = ca.vertcat(x00, u00, self.initial[self.dt])
 
-        lbg = [0] * N 
-        ubg = [0] * N 
+        x_mins = [self.min_lims[state] for state in self.states] * self.n
+        x_maxs = [self.max_lims[state] for state in self.states] * self.n
+        u_mins = [self.min_lims[control] for control in self.controls] * (self.n - 1)
+        u_maxs = [self.max_lims[control] for control in self.controls] * (self.n - 1)
 
-        x00 = [self.initial[state] for state in self.states]
-        u00 = [self.initial[control] for control in self.controls]
-        x0 = ca.vertcat(x00[0], u00[0], self.initial[self.dt])
+        lbx = x_mins + u_mins + list(np.zeros(self.n-1))
+        ubx = x_maxs + u_maxs + list(np.ones(self.n-1) * self.max_t)
         
         S = ca.nlpsol('S', 'ipopt', nlp)
         r = S(x0=x0, lbx=lbx, ubx=ubx, lbg=lbg, ubg=ubg)
@@ -107,7 +119,7 @@ def example():
 
     ocp.set_der(x, x_dot)
     ocp.set_objective(x, wpts[0, :])
-    ocp.set_objective(ocp.dt, ca.GenMX_zeros(N1))
+    ocp.set_objective(dt, ca.GenMX_zeros(N1))
     ocp.set_constraints(x, wpts[0, 0])
 
     x00 = wpts[0, :]
@@ -116,7 +128,7 @@ def example():
     xd00 = (x00[1:] - x00[:-1]) / dt00
     ocp.set_inital(x, x00)
     ocp.set_inital(x_dot, xd00)
-    ocp.set_inital(ocp.dt, dt00)
+    ocp.set_inital(dt, dt00)
 
     states, controls, times = ocp.solve()
 
@@ -138,7 +150,80 @@ def example():
     plt.show()
 
 
+def example2D():
+    pathpoints = 30
+    ref_path = {}
+    ref_path['x'] = 5*np.sin(np.linspace(0,2*np.pi, pathpoints+1))
+    ref_path['y'] = np.linspace(1,2, pathpoints+1)**2*10
+    wp = ca.horzcat(ref_path['x'], ref_path['y']).T
+
+    N = 5
+    N1 = N-1
+
+    wpts = np.array(wp[:, 0:N])
+
+    ocp = Ocp(N)
+
+    x = ocp.state('x')
+    y = ocp.state('y')
+    x_dot = ocp.control('x_dot')
+    y_dot = ocp.control('y_dot')
+    dt = ocp.get_time()
+
+    ocp.set_der(x, x_dot)
+    ocp.set_der(y, y_dot)
+
+    ocp.set_objective(x, wpts[0, :])
+    ocp.set_objective(y, wpts[1, :])
+    ocp.set_objective(dt, ca.GenMX_zeros(N1), 0.01)
+
+    ocp.set_constraints(x, wpts[0, 0])
+    ocp.set_constraints(y, wpts[1, 0])
+
+    max_speed = 1
+    ocp.set_lims(x, 0, ca.inf)
+    ocp.set_lims(y, 0, ca.inf)
+    ocp.set_lims(x_dot, -max_speed, max_speed)
+    ocp.set_lims(y_dot, -max_speed, max_speed)
+
+    T = 5
+    dt00 = [T/N1] * N1
+    ocp.set_inital(dt, dt00)
+    x00 = wpts[0, :]
+    y00 = wpts[1, :]
+    xd00 = (x00[1:] - x00[:-1]) / dt00
+    ocp.set_inital(x, x00)
+    ocp.set_inital(x_dot, xd00)
+    yd00 = (y00[1:] - y00[:-1]) / dt00
+    ocp.set_inital(y, y00)
+    ocp.set_inital(y_dot, yd00)
+
+    states, controls, times = ocp.solve()
+
+    x = states[:N]
+    y = states[N:]
+    x_dots = controls[:N1]
+    y_dots = controls[N1:]
+    total_time = np.sum(times)
+
+    print(f"Times: {times}")
+    print(f"Total Time: {total_time}")
+    print(f"xs: {x.T}")
+    print(f"ys: {y.T}")
+    print(f"X dots: {x_dots.T}")
+    print(f"Y dots: {y_dots.T}")
+
+
+    plt.figure(1)
+    plt.plot(wpts[0, :], wpts[1, :], 'o', markersize=12)
+
+    plt.plot(x, y, '+', markersize=20)
+
+    plt.show()
+
+
 
 if __name__ == "__main__":
-    example()
+    # example()
+    example2D()
 
