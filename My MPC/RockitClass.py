@@ -66,6 +66,99 @@ nx      = 3             # the system is composed of 3 states
 nu      = 2             # the system has 2 control inputs
 N       = 10            # number of control intervals
 
+class RockitMPC:
+    def __init__(self) -> None:
+        self.ocp = Ocp(T=FreeTime(10.0))
+
+        # Define states
+        self.x     = self.ocp.state()
+        self.y     = self.ocp.state()
+        self.theta = self.ocp.state()
+        self.X = vertcat(self.x, self.y, self.theta)
+
+        # Defince controls
+        self.delta = self.ocp.control()
+        self.V     = self.ocp.control(order=0)
+
+        # Define physical path parameter
+        self.waypoints = self.ocp.parameter(2, grid='control')
+        self.waypoint_last = self.ocp.parameter(2)
+        self.p = vertcat(self.x, self.y)
+
+        # Define parameter
+        self.X_0 = self.ocp.parameter(nx)
+
+    def init_mpc(self):
+        # Specify ODE
+        self.ocp.set_der(self.x,      self.V*cos(self.theta))
+        self.ocp.set_der(self.y,      self.V*sin(self.theta))
+        self.ocp.set_der(self.theta,  self.V/L*tan(self.delta))
+
+        # Initial constraints
+        self.ocp.subject_to(self.ocp.at_t0(self.X) == self.X_0)
+
+        # Initial guess
+        self.ocp.set_initial(self.x,      0)
+        self.ocp.set_initial(self.y,      0)
+        self.ocp.set_initial(self.theta,  0)
+
+        self.ocp.set_initial(self.V,    0.5)
+
+        # Path constraints
+        max_v = 5
+        self.ocp.subject_to( 0 <= (self.V <= max_v) )
+        #ocp.subject_to( -0.3 <= (ocp.der(V) <= 0.3) )
+        self.ocp.subject_to( -pi/6 <= (self.delta <= pi/6) )
+
+        # Minimal time
+        self.ocp.add_objective(0.50*self.ocp.T)
+
+        self.ocp.add_objective(self.ocp.sum(sumsqr(self.p-self.waypoints), grid='control'))
+        self.ocp.add_objective(sumsqr(self.ocp.at_tf(self.p)-self.waypoint_last))
+
+        # Pick a solution method
+        options = {"ipopt": {"print_level": 0}}
+        options["expand"] = True
+        options["print_time"] = False
+        self.ocp.solver('ipopt', options)
+
+        # Make it concrete for this ocp
+        self.ocp.method(MultipleShooting(N=N, M=1, intg='rk', grid=FreeGrid(min=0.05, max=2)))
+
+    def set_ocp_values(self, current_waypoints):
+        self.ocp.set_value(self.waypoints,current_waypoints[:,:-1])
+        self.ocp.set_value(self.waypoint_last,current_waypoints[:,-1])
+
+    def set_x0(self, current_X):
+        self.ocp.set_value(self.X_0, current_X)
+
+    def solve(self):
+        sol = self.ocp.solve()
+
+        t_sol, x_sol     = sol.sample(self.x,     grid='control')
+        t_sol, y_sol     = sol.sample(self.y,     grid='control')
+        t_sol, theta_sol = sol.sample(self.theta, grid='control')
+        t_sol, delta_sol = sol.sample(self.delta, grid='control')
+        t_sol, V_sol     = sol.sample(self.V,     grid='control')
+
+        err = sol.value(self.ocp.objective)
+
+        self.ocp.set_initial(self.x, x_sol)
+        self.ocp.set_initial(self.y, y_sol)
+        self.ocp.set_initial(self.theta, theta_sol)
+        self.ocp.set_initial(self.delta, delta_sol)
+        self.ocp.set_initial(self.V, V_sol)
+
+        return t_sol, x_sol, y_sol, theta_sol, delta_sol, V_sol, err
+
+# Define reference path
+pathpoints = 30
+ref_path = {}
+ref_path['x'] = 5*sin(np.linspace(0,2*pi, pathpoints+1))
+ref_path['y'] = np.linspace(1,2, pathpoints+1)**2*10
+wp = horzcat(ref_path['x'], ref_path['y']).T
+
+
 # -------------------------------
 # Logging variables
 # -------------------------------
@@ -79,86 +172,11 @@ V_hist         = np.zeros((Nsim+1, N+1))
 
 tracking_error = np.zeros((Nsim+1, 1))
 
-# -------------------------------
-# Set OCP
-# -------------------------------
-
-ocp = Ocp(T=FreeTime(10.0))
-
-# Bicycle model
-
-# Define states
-x     = ocp.state()
-y     = ocp.state()
-theta = ocp.state()
-
-# Defince controls
-delta = ocp.control()
-V     = ocp.control(order=0)
-
-# Specify ODE
-ocp.set_der(x,      V*cos(theta))
-ocp.set_der(y,      V*sin(theta))
-ocp.set_der(theta,  V/L*tan(delta))
-
-# Define parameter
-X_0 = ocp.parameter(nx)
-
-# Initial constraints
-X = vertcat(x, y, theta)
-ocp.subject_to(ocp.at_t0(X) == X_0)
-
-# Initial guess
-ocp.set_initial(x,      0)
-ocp.set_initial(y,      0)
-ocp.set_initial(theta,  0)
-
-ocp.set_initial(V,    0.5)
-
-# Path constraints
-max_v = 5
-ocp.subject_to( 0 <= (V <= max_v) )
-#ocp.subject_to( -0.3 <= (ocp.der(V) <= 0.3) )
-ocp.subject_to( -pi/6 <= (delta <= pi/6) )
-
-# Minimal time
-ocp.add_objective(0.50*ocp.T)
-
-# Define physical path parameter
-waypoints = ocp.parameter(2, grid='control')
-waypoint_last = ocp.parameter(2)
-p = vertcat(x,y)
-
-# waypoints = ocp.parameter(3, grid='control')
-# waypoint_last = ocp.parameter(3)
-# p = vertcat(x,y,theta)
-
-ocp.add_objective(ocp.sum(sumsqr(p-waypoints), grid='control'))
-ocp.add_objective(sumsqr(ocp.at_tf(p)-waypoint_last))
-
-# Pick a solution method
-options = {"ipopt": {"print_level": 0}}
-options["expand"] = True
-options["print_time"] = False
-ocp.solver('ipopt', options)
-
-# Make it concrete for this ocp
-ocp.method(MultipleShooting(N=N, M=1, intg='rk', grid=FreeGrid(min=0.05, max=2)))
-
-# Define reference path
-pathpoints = 30
-ref_path = {}
-ref_path['x'] = 5*sin(np.linspace(0,2*pi, pathpoints+1))
-ref_path['y'] = np.linspace(1,2, pathpoints+1)**2*10
-wp = horzcat(ref_path['x'], ref_path['y']).T
-
-# theta_path = [arctan2(ref_path['y'][k+1]-ref_path['y'][k], ref_path['x'][k+1]-ref_path['x'][k]) for k in range(pathpoints)]
-# ref_path['theta'] = theta_path + [theta_path[-1]]
-# wp = horzcat(ref_path['x'], ref_path['y'], ref_path['theta']).T
 
 # -------------------------------
 # Solve the OCP wrt a parameter value (for the first time)
 # -------------------------------
+
 
 # First waypoint is current position
 index_closest_point = 0
@@ -166,27 +184,22 @@ index_closest_point = 0
 # Create a list of N waypoints
 current_waypoints = get_current_waypoints(index_closest_point, wp, N, dist=6)
 
-# Set initial value for waypoint parameters
-ocp.set_value(waypoints,current_waypoints[:,:-1])
-ocp.set_value(waypoint_last,current_waypoints[:,-1])
+mpc = RockitMPC()
+mpc.init_mpc()
+mpc.set_ocp_values(current_waypoints)
 
 # Set initial value for states
 current_X = vertcat(ref_path['x'][0], ref_path['y'][0], 0)
-ocp.set_value(X_0, current_X)
+mpc.set_x0(current_X)
 
 # Solve the optimization problem
-sol = ocp.solve()
+t_sol, x_sol, y_sol, theta_sol, delta_sol, V_sol, err = mpc.solve()
 
 # Get discretised dynamics as CasADi function to simulate the system
-Sim_system_dyn = ocp._method.discrete_system(ocp)
+Sim_system_dyn = mpc.ocp._method.discrete_system(mpc.ocp)
+
 
 # Log data for post-processing
-t_sol, x_sol     = sol.sample(x,     grid='control')
-t_sol, y_sol     = sol.sample(y,     grid='control')
-t_sol, theta_sol = sol.sample(theta, grid='control')
-t_sol, delta_sol = sol.sample(delta, grid='control')
-t_sol, V_sol     = sol.sample(V,     grid='control')
-
 time_hist[0,:]    = t_sol
 x_hist[0,:]       = x_sol
 y_hist[0,:]       = y_sol
@@ -194,10 +207,7 @@ theta_hist[0,:]   = theta_sol
 delta_hist[0,:]   = delta_sol
 V_hist[0,:]       = V_sol
 
-tracking_error[0] = sol.value(ocp.objective)
-
-# Look at the Constrain Jacobian and the Lagrange Hessian structure
-ocp.spy()
+tracking_error[0] = err
 
 # -------------------------------
 # Simulate the MPC solving the OCP (with the updated state) several times
@@ -205,35 +215,18 @@ ocp.spy()
 
 for i in range(Nsim):
     print("timestep", i+1, "of", Nsim)
-
-    # Combine first control inputs
     current_U = vertcat(delta_sol[0], V_sol[0])
 
-    # Simulate dynamics (applying the first control input) and update the current state
     current_X = Sim_system_dyn(x0=current_X, u=current_U, T=t_sol[1]-t_sol[0])["xf"]
 
-    # Set the parameter X0 to the new current_X
-    ocp.set_value(X_0, current_X)
+    mpc.set_x0(current_X)
 
-    # Find closest point on the reference path compared witch current position
     index_closest_point = find_closest_point(current_X[:2], ref_path, index_closest_point)
-
-    # Create a list of N waypoints
     current_waypoints = get_current_waypoints(index_closest_point, wp, N, dist=6)
 
-    # Set initial value for waypoint parameters
-    ocp.set_value(waypoints, current_waypoints[:,:-1])
-    ocp.set_value(waypoint_last, current_waypoints[:,-1])
+    mpc.set_ocp_values(current_waypoints)
 
-    # Solve the optimization problem
-    sol = ocp.solve()
-
-    # Log data for post-processing
-    t_sol, x_sol     = sol.sample(x,     grid='control')
-    t_sol, y_sol     = sol.sample(y,     grid='control')
-    t_sol, theta_sol = sol.sample(theta, grid='control')
-    t_sol, delta_sol = sol.sample(delta, grid='control')
-    t_sol, V_sol     = sol.sample(V,     grid='control')
+    t_sol, x_sol, y_sol, theta_sol, delta_sol, V_sol, err = mpc.solve()
 
     time_hist[i+1,:]    = t_sol
     x_hist[i+1,:]       = x_sol
@@ -242,14 +235,10 @@ for i in range(Nsim):
     delta_hist[i+1,:]   = delta_sol
     V_hist[i+1,:]       = V_sol
 
-    tracking_error[i+1] = sol.value(ocp.objective)
+    tracking_error[i+1] = err
     print('Tracking error f', tracking_error[i+1])
 
-    ocp.set_initial(x, x_sol)
-    ocp.set_initial(y, y_sol)
-    ocp.set_initial(theta, theta_sol)
-    ocp.set_initial(delta, delta_sol)
-    ocp.set_initial(V, V_sol)
+
 
 # -------------------------------
 # Plot the results
@@ -316,3 +305,7 @@ ax1.set_xlabel('N [-]')
 ax1.set_ylabel('obj f')
 
 plt.show(block=True)
+
+
+
+

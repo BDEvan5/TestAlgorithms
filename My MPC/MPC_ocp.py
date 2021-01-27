@@ -22,8 +22,10 @@ class MPC:
         self.max_lims = {}
 
 
-    def state(self, name="x"):
-        state = ca.MX.sym(name, self.n)
+    def state(self, name="x", size=None):
+        if size is None:
+            size = self.n
+        state = ca.MX.sym(name, size)
         self.states.append(state)
 
         return state
@@ -386,6 +388,93 @@ def example_loop_v_th():
 
         plt.pause(0.5)
 
+def example_loop_v_d():
+    pathpoints = 30
+    ref_path = {}
+    ref_path['x'] = 5*np.sin(np.linspace(0,2*np.pi, pathpoints+1))
+    ref_path['y'] = np.linspace(1,2, pathpoints+1)**2*10
+    wp = ca.horzcat(ref_path['x'], ref_path['y']).T
+
+    N = 10
+    N1 = N-1
+
+    ocp = MPC(N)
+
+    x = ocp.state('x')
+    y = ocp.state('y')
+    th = ocp.state('th')
+
+    d = ocp.control('d')
+    v = ocp.control('v')
+
+    dt = ocp.get_time()
+
+    ocp.set_der(x, v*ca.cos(th[:-1]))
+    ocp.set_der(y, v*ca.sin(th[:-1]))
+    ocp.set_der(th, v/0.33 * ca.tan(d))
+
+    ocp.set_objective(dt, ca.GenMX_zeros(N1), 0.01)
+
+    # set limits
+    max_speed = 10
+    ocp.set_lims(x, -ca.inf, ca.inf)
+    ocp.set_lims(y, -ca.inf, ca.inf)
+    ocp.set_lims(v, 0, max_speed)
+    ocp.set_lims(th, -ca.pi, ca.pi)
+    ocp.set_lims(d, -0.4, 0.4)
+
+    wpts = np.array(wp[:,0:N])
+
+    # find starting vals
+    T = 5
+    dt00 = np.array([T/N1] * N1)
+    ocp.set_inital(dt, dt00)
+    x00 = wpts[0, :]
+    ocp.set_inital(x, x00)
+    y00 = wpts[1, :]
+    ocp.set_inital(y, y00)
+    th00 = [lib.get_bearing(wpts[:, i], wpts[:, i+1]) for i in range(N1)]
+    th00.append(0)
+    ocp.set_inital(th, th00.copy())
+    v00 = np.array([lib.get_distance(wpts[:, i], wpts[:, i+1]) for i in range(N1)]) / dt00
+    ocp.set_inital(v, v00)
+    th00.pop(-1)
+    d00 = np.arctan(np.array(th00) * 0.33 / v00)
+    ocp.set_inital(d, d00)
+
+    ocp.set_up_solve()
+
+    for i in range(20):
+        wpts = np.array(wp[:, i:i+N])
+        x0 = [wpts[0, 0], wpts[1, 0], lib.get_bearing(wpts[:, 0], wpts[:, 1])]
+
+        ocp.set_objective(x, wpts[0, :])
+        ocp.set_objective(y, wpts[1, :])
+
+        states, controls, times = ocp.solve(x0)
+
+        xs = states[:N]
+        ys = states[N:2*N]
+        ths = states[2*N:]
+        vs = controls[:N1]
+        ds = controls[N1:]
+        total_time = np.sum(times)
+
+        print(f"Times: {times}")
+        print(f"Total Time: {total_time}")
+        print(f"xs: {xs.T}")
+        print(f"ys: {ys.T}")
+        print(f"Thetas: {ths.T}")
+        print(f"Velocities: {vs.T}")
+
+        plt.figure(1)
+        plt.clf()
+        plt.plot(wpts[0, :], wpts[1, :], 'o', markersize=12)
+
+        plt.plot(xs, ys, '+', markersize=20)
+
+        plt.pause(0.5)
+
 
 
 
@@ -394,4 +483,5 @@ if __name__ == "__main__":
     # example2D()
     # example_loop()
     example_loop_v_th()
+    # example_loop_v_d()
 
