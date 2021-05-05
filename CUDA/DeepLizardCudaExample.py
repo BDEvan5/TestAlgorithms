@@ -12,6 +12,7 @@ import torchvision
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 
+from pandas.io.formats.style import Styler
 from collections import OrderedDict
 from collections import namedtuple
 from itertools import product
@@ -168,7 +169,11 @@ class RunManager():
         grid = torchvision.utils.make_grid(images)
 
         self.tb.add_image('images', grid)
-        self.tb.add_graph(self.network, images)
+        self.tb.add_graph(
+            self.network
+            ,images.to(getattr(run, 'device', 'cpu'))
+        )
+        # self.tb.add_graph(self.network, images)
 
     def end_run(self):
         self.tb.close()
@@ -236,14 +241,7 @@ class Epoch():
         self.num_correct = 0
         self.start_time = None
 
-def run_diagnostic():
-    # params = OrderedDict(
-    #         lr = [.01]
-    #         ,batch_size = [1000, 10000, 20000]
-    #         , num_workers = [0, 1]
-    #         , device = ['cuda', 'cpu']
-    #     )
-
+def run_plain_test():
     params = OrderedDict(
         lr = [.01]
         ,batch_size = [1000, 2000]
@@ -289,7 +287,58 @@ def run_diagnostic():
         m.end_run()
     m.save('results')
 
+def run_cuda_diagnostic():
+    params = OrderedDict(
+            lr = [.01]
+            # ,batch_size = [1000, 10000, 20000]
+            , batch_size=[1000]
+            ,shuffle=[True]
+            # , num_workers = [0, 1]
+            , device = ['cuda', 'cpu']
+        )
+
+    train_set = torchvision.datasets.FashionMNIST(
+        root='./data'
+        ,train=True
+        ,download=True
+        ,transform=transforms.Compose([
+            transforms.ToTensor()
+        ])
+    )
+    m = RunManager()
+    for run in RunBuilder().get_runs(params):
+        device = torch.device(run.device)
+        network = Network().to(device)
+
+        loader = torch.utils.data.DataLoader(train_set, batch_size=run.batch_size, shuffle=run.shuffle)
+        optimizer = torch.optim.Adam(network.parameters(), lr=run.lr)
+
+        m.begin_run(run, network, loader)
+        print(f"Run: ", run)
+        for epoch in range(5):
+            m.begin_epoch()
+            for batch in loader:
+                images = batch[0].to(device)
+                labels = batch[1].to(device)
+                preds = network(images)
+                loss = F.cross_entropy(preds, labels)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                m.track_loss(loss, batch)
+                m.track_num_correct(preds, labels)
+            print(
+                "epoch", epoch, 
+                "total_correct:", m.epoch_num_correct, 
+                "loss:", m.epoch_loss
+            )
+            m.end_epoch()
+        m.end_run()
+    m.save('cuda_test')
+
 
 if __name__ == "__main__":
     # run_loop()
-    run_diagnostic()
+    # run_plain_test()
+    run_cuda_diagnostic()
